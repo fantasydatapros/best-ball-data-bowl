@@ -4,12 +4,12 @@ Hosted by [Fantasy Data Pros](https://www.fantasydatapros.com)
 
 <img src="https://i.imgur.com/2mpLjzV.png">
 
-## Submission Guidelines
+# Submission Guidelines
 
 Before submitting your entry:
 * [Signup for the competition via the Google Forms signup link](https://docs.google.com/forms/d/e/1FAIpQLSeSK_A4Tn_Sw4gGD_Qc49-cOQPIbJtNIgp8JKpLKpWxjPsPow/viewform?usp=sf_link)
 
-Submission must be a Jupyter or R notebook, consisting of no more than 2000 words and 15 tables/figures. Submissions must utilize at the very least data from BBMIII (trhe `2021` folder under `data`), although you can also use outside datasets for NFL stats. We prefer you use [nfl_data_py](https://github.com/cooperdff/nfl_data_py) if you're using Python, and [nflfastR](https://github.com/nflverse/nflfastR/) if you're using R. 
+Submission must be a Jupyter or R notebook, consisting of no more than 2000 words and 15 tables/figures. Submissions must utilize at the very least data from BBMIII (the `2022` folder under `data`), although you can also use outside datasets for NFL stats. We prefer you use [nfl_data_py](https://github.com/cooperdff/nfl_data_py) if you're using Python, and [nflfastR](https://github.com/nflverse/nflfastR/) if you're using R. 
 
 To submit your entry:
 
@@ -18,6 +18,10 @@ To submit your entry:
 For example, if the title of your submission is "Analyzing the Efficacy of Different Structural Drafting Strategies", make sure to name your notebook "Analyzing the Efficacy of Structural Drafting Strategies.ipynb" (or .rmd).
 
 Your work will be public once submitted via that repository. Good luck!
+
+# Data
+
+Data for this competition is located under [data](https://github.com/fantasydatapros/best-ball-data-bowl/tree/master/data). As stated above, for a submission to be valid, you must at least use BBMIII data, although you can use external data sources as well such as nflfastR. A detailed description of the data is located [here as a README under that data folder](https://github.com/fantasydatapros/best-ball-data-bowl/blob/master/data/README.md).
 
 # Competition Details
 
