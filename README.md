@@ -72,3 +72,7 @@ To be eligible, all notebooks submitted must at least use data from Best Ball Ma
 * August 1st: Finalist round on Peter Overzet's Youtube channel. Finalists will have the opportunity to present their findings on stream and support their conclusions.
 
 * August 15th: Winning team announced.
+
+# Prizes
+
+As of April 14th, we are still working on putting together a cash prize fund, but the prize will be a combo of cash + merch.
