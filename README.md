@@ -1,6 +1,7 @@
 # Fantasy Data Pros 1st Annual Best Ball Data Bowl
 
 <img src="https://i.imgur.com/2mpLjzV.png">
+
 ## Submission Guidelines
 
 Before submitting your entry:
