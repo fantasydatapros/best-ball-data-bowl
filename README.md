@@ -7,6 +7,8 @@ Datasets courtesy of Underdog Fantasy.
 ```
 /2020 (BBMI)
     part_00.csv
+
+
 /2021 (BBMII)
     /post_season
         finals.csv
@@ -17,6 +19,8 @@ Datasets courtesy of Underdog Fantasy.
         part_01.csv
         ...
         part_05.csv
+
+
 /2022 (BBMIII)
     /post_season
         /finals
