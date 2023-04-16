@@ -8,7 +8,7 @@ Hosted by <a href="https://www.fantasydatapros.com" target="_blank">Fantasy Data
 
 Before submitting your entry:
 
-### <a target="_blank" href="https://docs.google.com/forms/d/e/1FAIpQLSeSK_A4Tn_Sw4gGD_Qc49-cOQPIbJtNIgp8JKpLKpWxjPsPow/viewform?usp=sf_link"> Signup for the competition via the Google Forms signup link</a>
+## <a target="_blank" href="https://docs.google.com/forms/d/e/1FAIpQLSeSK_A4Tn_Sw4gGD_Qc49-cOQPIbJtNIgp8JKpLKpWxjPsPow/viewform?usp=sf_link"> Signup for the competition via the Google Forms signup link</a>
 
 Submission must be a Jupyter or R notebook, consisting of no more than 2000 words and 15 tables/figures. Submissions must utilize at the very least data from BBMIII (the `2022` folder under `data`), although you can also use outside datasets for NFL stats. We prefer you use <a target="_blank" href="https://github.com/cooperdff/nfl_data_py">nfl_data_py</a> if you're using Python, and <a href="https://github.com/nflverse/nflfastR/" target="_blank">nflfastR</a> if you're using R. 
 
