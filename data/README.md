@@ -1,5 +1,11 @@
 # Best Ball Data Bowl Data Sets
 
+## Data Source
+
+BBM1: https://underblog.underdogfantasy.com/raw-data-from-best-ball-mania-i-dbb5f947311d
+BBM2: https://underdognetwork.com/football/best-ball-research/best-ball-mania-ii-downloadable-pick-by-pick-data
+BBM3: https://underdognetwork.com/football/best-ball-research/best-ball-mania-iii-downloadable-pick-by-pick-data
+
 Datasets courtesy of Underdog Fantasy
 
 Each of the datasets below contain BBM data for seperate BBM contests (so far there have been 3).
