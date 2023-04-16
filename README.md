@@ -1,6 +1,6 @@
 # Fantasy Data Pros 1st Annual Best Ball Data Bowl
 
-Hosted by [Fantasy Data Pros](https://www.fantasydatapros.com)
+Hosted by <a href="https://www.fantasydatapros.com" target="_blank">Fantasy Data Pros</a>
 
 <img src="https://i.imgur.com/2mpLjzV.png">
 
@@ -8,13 +8,13 @@ Hosted by [Fantasy Data Pros](https://www.fantasydatapros.com)
 
 Before submitting your entry:
 
-### [Signup for the competition via the Google Forms signup link](https://docs.google.com/forms/d/e/1FAIpQLSeSK_A4Tn_Sw4gGD_Qc49-cOQPIbJtNIgp8JKpLKpWxjPsPow/viewform?usp=sf_link)
+### <a target="_blank" href="https://docs.google.com/forms/d/e/1FAIpQLSeSK_A4Tn_Sw4gGD_Qc49-cOQPIbJtNIgp8JKpLKpWxjPsPow/viewform?usp=sf_link"> Signup for the competition via the Google Forms signup link</a>
 
-Submission must be a Jupyter or R notebook, consisting of no more than 2000 words and 15 tables/figures. Submissions must utilize at the very least data from BBMIII (the `2022` folder under `data`), although you can also use outside datasets for NFL stats. We prefer you use [nfl_data_py](https://github.com/cooperdff/nfl_data_py) if you're using Python, and [nflfastR](https://github.com/nflverse/nflfastR/) if you're using R. 
+Submission must be a Jupyter or R notebook, consisting of no more than 2000 words and 15 tables/figures. Submissions must utilize at the very least data from BBMIII (the `2022` folder under `data`), although you can also use outside datasets for NFL stats. We prefer you use <a target="_blank" href="https://github.com/cooperdff/nfl_data_py">nfl_data_py</a> if you're using Python, and <a href="https://github.com/nflverse/nflfastR/" target="_blank">nflfastR</a> if you're using R. 
 
 To submit your entry:
 
-**Fork this repository and make a pull request, adding your notebook to the submission folder. Please name the file the title of your submission. Before making your submission, check out the Example Notebook under `submissions`. It will provide guidelines on how to format the inner contents of your notebook. When making your PR, make sure to include the title of your submission, a brief description of your analysis, and your name / the name of your team and team members.**
+**Fork this repository and make a pull request, adding your notebook to the submission folder. Please name the file the title of your submission. Before making your submission, check out the <a target="_blank" href="https://github.com/fantasydatapros/best-ball-data-bowl/blob/master/submissions/Example%20Notebook.ipynb">Example Notebook</a> under `submissions`. It will provide guidelines on how to format the inner contents of your notebook. When making your PR, make sure to include the title of your submission, a brief description of your analysis, and your name / the name of your team and team members.**
 
 For example, if the title of your submission is "Analyzing the Efficacy of Different Structural Drafting Strategies", make sure to name your notebook "Analyzing the Efficacy of Structural Drafting Strategies.ipynb" (or .rmd).
 
@@ -22,7 +22,7 @@ Your work will be public once submitted via that repository. Good luck!
 
 # Data
 
-Data for this competition is located under [data](https://github.com/fantasydatapros/best-ball-data-bowl/tree/master/data). As stated above, for a submission to be valid, you must at least use BBMIII data, although you can use external data sources as well such as nflfastR. A detailed description of the data is located [here as a README under that data folder](https://github.com/fantasydatapros/best-ball-data-bowl/blob/master/data/README.md).
+Data for this competition is located under <a href="https://github.com/fantasydatapros/best-ball-data-bowl/tree/master/data">data</a>. As stated above, for a submission to be valid, you must at least use BBMIII data, although you can use external data sources as well such as nflfastR. A detailed description of the data is located <a target="_blank" href="https://github.com/fantasydatapros/best-ball-data-bowl/blob/master/data/README.md">here as a README under that data folder</a>
 
 # Competition Details
 
@@ -70,7 +70,7 @@ To be eligible, all notebooks submitted must at least use data from Best Ball Ma
 
 * July 15th: Finalists announced. 5 Finalists teams/individuals will be chosen to announce to the final round on August 1st.
 
-* August 1st: Finalist round on [Peter Overzet's Youtube channel](https://www.youtube.com/@PeterOverzet). Finalists will have the opportunity to present their findings on stream and support their conclusions.
+* August 1st: Finalist round on <a target="_blank" href="https://www.youtube.com/@PeterOverzet">Peter Overzet's Youtube channel</a>. Finalists will have the opportunity to present their findings on stream and support their conclusions.
 * August 15th: Winning team announced.
 
 # Prizes
