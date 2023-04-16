@@ -69,6 +69,8 @@ Data here is again split up into regular season and postseason. There are multip
 
 ## File Structure:
 
+File structure for the datasets is below. You'll notice that for 2021 and 2022, the data is partioned in "parts". These are equal slices of the data which will need to be concatenated together. We did it this way because Github has a max file upload limit. 
+
 ```
 /2020 (BBMI)
     part_00.csv

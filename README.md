@@ -7,8 +7,10 @@ Hosted by [Fantasy Data Pros](https://www.fantasydatapros.com)
 # Submission Guidelines
 
 Before submitting your entry:
-* [Signup for the competition via the Google Forms signup link](https://docs.google.com/forms/d/e/1FAIpQLSeSK_A4Tn_Sw4gGD_Qc49-cOQPIbJtNIgp8JKpLKpWxjPsPow/viewform?usp=sf_link)
-
+<div style="display: flex; flex-direction: row; align-items: center; margin-bottom: 2rem;">
+<img style="height: 60px;" src="https://www.gstatic.com/images/branding/product/1x/forms_512dp.png"></img>
+<a style="font-size: 1.25rem;" target="_blank" href="https://docs.google.com/forms/d/e/1FAIpQLSeSK_A4Tn_Sw4gGD_Qc49-cOQPIbJtNIgp8JKpLKpWxjPsPow/viewform?usp=sf_link">Signup for the competition via the Google Forms signup link</a>
+</div>
 Submission must be a Jupyter or R notebook, consisting of no more than 2000 words and 15 tables/figures. Submissions must utilize at the very least data from BBMIII (the `2022` folder under `data`), although you can also use outside datasets for NFL stats. We prefer you use [nfl_data_py](https://github.com/cooperdff/nfl_data_py) if you're using Python, and [nflfastR](https://github.com/nflverse/nflfastR/) if you're using R. 
 
 To submit your entry:
@@ -69,8 +71,7 @@ To be eligible, all notebooks submitted must at least use data from Best Ball Ma
 
 * July 15th: Finalists announced. 5 Finalists teams/individuals will be chosen to announce to the final round on August 1st.
 
-* August 1st: Finalist round on Peter Overzet's Youtube channel. Finalists will have the opportunity to present their findings on stream and support their conclusions.
-
+* August 1st: Finalist round on [Peter Overzet's Youtube channel](https://www.youtube.com/@PeterOverzet). Finalists will have the opportunity to present their findings on stream and support their conclusions.
 * August 15th: Winning team announced.
 
 # Prizes
