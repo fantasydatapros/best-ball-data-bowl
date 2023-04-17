@@ -49,45 +49,49 @@ Hayden Wink's notes on the data:
 
 Data here is split up in regular season and postseason. Each CSV (whether regular season or postseason) has the same columns.
 
-| **Column**              | **Data Type** | **Description**                                | **Example**                          |
-|-------------------------|---------------|------------------------------------------------|--------------------------------------|
-| draft_id                | string        | Entry id                                       | fde6d91d-04fb-4a16-b5d8-6e421361bb63 |
-| draft_time              | nan           | Empty column                                   |                                      |
-| clock                   | int           | Time per pick alloted                          | 30                                   |
-| tournament_entry_id     | string        |                                                | 801f0c2a-3e43-49bb-aad5-0054cea26e23 |
-| tournament_round_number | int           | Round player was selected                      | 4                                    |
-| player_name             | string        | NFL player name                                | Jamaal Williams                      |
-| position_name           | string        | Player Position                                | RB                                   |
-| bye_week                | int           | Player bye week                                | 9                                    |
-| projection_adp          | int           |                                                | 0                                    |
-| pick_order              | int           |                                                | 0                                    |
-| overall_pick_number     | int           |                                                | 1741                                 |
-| team_pick_number        | int           |                                                | 13                                   |
-| pick_points             | float         |                                                | 11.9                                 |
-| roster_points           | float         |                                                | 138.52                               |
-| playoff_team            | int           | True/False value. 1 if entry made the playoffs | 1                                    |
+| **Column**               | **Data Type** | **Description**                                           | **Example**                          |
+|--------------------------|---------------|-----------------------------------------------------------|--------------------------------------|
+| draft_id                 | string        | Entry id                                                  | fde6d91d-04fb-4a16-b5d8-6e421361bb63 |
+| draft_time               | nan           | Date & Time of Day                                        |                                      |
+| clock                    | int           | Time per pick allotted (fast vs. slow drafts)             | 30                                   |
+| tournament_entry_id      | string        | draft team id                                             | 801f0c2a-3e43-49bb-aad5-0054cea26e23 |
+| tournament_round_number* | int           | Tournament round number                                   | 4                                    |
+| player_name              | string        | NFL player name                                           | Jamaal Williams                      |
+| position_name            | string        | Player position                                           | RB                                   |
+| bye_week                 | int           | Player bye week                                           | 9                                    |
+| projection_adp           | int           | Average draft position at time of pick                    | 0                                    |
+| pick_order               | int           | Team's draft placement                                    | 0                                    |
+| overall_pick_number      | int           | Overall pick number                                       | 1741                                 |
+| team_pick_number         | int           | Team pick number as round                                 | 13                                   |
+| pick_points              | float         | The amount of points attributed to the team in that round | 11.9                                 |
+| roster_points            | float         | the team's total points in that round                     | 138.52                               |
+| playoff_team             | int           | True/False value. 1 if entry made the playoffs            | 1                                    |
+
+\* **Hayden Winks**: `tournament_round_number` is 1 = "regular season", 2 = second round, 3 = semifinals, 4 = finals. **Ben**: Note that the data has already been partioned for you based on this column. For example, if you are working on a regular season CSV, then `tournament_round_number` will be 1.
 
 ### 2022
 
 Data here is again split up into regular season and postseason. There are multiple files that must be concatenated together for each stage of the postseason. Regular season is split up into mixed and fast time formats for drafts. 
 
-| **Column**              | **Data Type** | **Description**                                | **Example**                          |
-|-------------------------|---------------|------------------------------------------------|--------------------------------------|
-| draft_id                | string        | Entry id                                       | fde6d91d-04fb-4a16-b5d8-6e421361bb63 |
-| draft_time              | nan           | Empty column                                   |                                      |
-| clock                   | int           | Time per pick alloted                          | 30                                   |
-| tournament_entry_id     | string        |                                                | 801f0c2a-3e43-49bb-aad5-0054cea26e23 |
-| tournament_round_number | int           | Round player was selected                      | 4                                    |
-| player_name             | string        | NFL player name                                | Jamaal Williams                      |
-| position_name           | string        | Player Position                                | RB                                   |
-| bye_week                | int           | Player bye week                                | 9                                    |
-| projection_adp          | int           |                                                | 0                                    |
-| pick_order              | int           |                                                | 0                                    |
-| overall_pick_number     | int           |                                                | 1741                                 |
-| team_pick_number        | int           |                                                | 13                                   |
-| pick_points             | float         |                                                | 11.9                                 |
-| roster_points           | float         |                                                | 138.52                               |
-| playoff_team            | int           | True/False value. 1 if entry made the playoffs | 1                                    |
+| **Column**               | **Data Type** | **Description**                                           | **Example**                          |
+|--------------------------|---------------|-----------------------------------------------------------|--------------------------------------|
+| draft_id                 | string        | Entry id                                                  | fde6d91d-04fb-4a16-b5d8-6e421361bb63 |
+| draft_time               | nan           | Date & Time of Day                                        |                                      |
+| clock                    | int           | Time per pick allotted (fast vs. slow drafts)             | 30                                   |
+| tournament_entry_id      | string        | draft team id                                             | 801f0c2a-3e43-49bb-aad5-0054cea26e23 |
+| tournament_round_number* | int           | Tournament round number                                   | 4                                    |
+| player_name              | string        | NFL player name                                           | Jamaal Williams                      |
+| position_name            | string        | Player position                                           | RB                                   |
+| bye_week                 | int           | Player bye week                                           | 9                                    |
+| projection_adp           | int           | Average draft position at time of pick                    | 0                                    |
+| pick_order               | int           | Team's draft placement                                    | 0                                    |
+| overall_pick_number      | int           | Overall pick number                                       | 1741                                 |
+| team_pick_number         | int           | Team pick number as round                                 | 13                                   |
+| pick_points              | float         | The amount of points attributed to the team in that round | 11.9                                 |
+| roster_points            | float         | the team's total points in that round                     | 138.52                               |
+| playoff_team             | int           | True/False value. 1 if entry made the playoffs            | 1                                    |
+
+\* **Hayden Winks**: `tournament_round_number` is 1 = "regular season", 2 = second round, 3 = semifinals, 4 = finals. **Ben**: Note that the data has already been partioned for you based on this column. For example, if you are working on a regular season CSV, then `tournament_round_number` will be 1.
 
 ## File Structure:
 
