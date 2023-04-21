@@ -16,13 +16,13 @@ To submit your entry:
 
 **Fork this repository and make a pull request, adding your notebook to the submission folder. Please name the file the title of your submission. Before making your submission, check out the <a target="_blank" href="https://github.com/fantasydatapros/best-ball-data-bowl/blob/master/submissions/Example%20Notebook.ipynb">Example Notebook</a> under `submissions`. It will provide guidelines on how to format the inner contents of your notebook. When making your PR, make sure to include the title of your submission, a brief description of your analysis, and your name / the name of your team and team members.**
 
-For example, if the title of your submission is "Analyzing the Efficacy of Different Structural Drafting Strategies", make sure to name your notebook "Analyzing the Efficacy of Structural Drafting Strategies.ipynb" (or .rmd).
+For example, if the title of your submission is "Analyzing the Effectiveness of Different Structural Drafting Strategies", make sure to name your notebook "Analyzing the Effectiveness of Structural Drafting Strategies.ipynb" (or .rmd).
 
 Your work will be public once submitted via that repository. Good luck!
 
 # Data
 
-Data for this competition is located under <a href="https://github.com/fantasydatapros/best-ball-data-bowl/tree/master/data">data</a>. As stated above, for a submission to be valid, you must at least use BBMIII data, although you can use external data sources as well such as nflfastR. A detailed description of the data is located <a target="_blank" href="https://github.com/fantasydatapros/best-ball-data-bowl/blob/master/data/README.md">here as a README under that data folder</a>
+Data for this competition is located under <a href="https://github.com/fantasydatapros/best-ball-data-bowl/tree/master/data">data</a>. As stated above, for a submission to be valid, you must at least use BBMIII data, although you can use external data sources as well such as nflfastR. A detailed description of the data is located <a target="_blank" href="https://github.com/fantasydatapros/best-ball-data-bowl/blob/master/data/README.md">here as a README under that data folder.</a>
 
 # Competition Details
 
@@ -50,6 +50,7 @@ Your task is to analyze data from Best Ball Mania 1-3 to uncover unique strategi
 * Quantify Best Ball strategy. Best Ball has a unique scoring format that differs from traditional fantasy football, so comparing and contrasting different strategies can provide valuable insights. Participants can explore which strategies yield the best results and identify other strategies that could be adopted. This can include exploring commonly used strategies such as stacking.
 
 As this competition is inspired by the NFL Big Data Bowl, we've taken some of their guidelines and applied them to our competition here:
+
 As a participant, you are encouraged to think creatively and explore unique strategies and insights that can be gained from analyzing the Best Ball Mania 1-3 data. While there are suggested topics such as developing a new Best Ball strategy or metric, participants are free to think outside the box and thoroughly examine one idea rather than several ideas less thoroughly.
 
 Your submission should be a Jupyter or R notebook containing no more than 2,000 words and no more than 15 tables/figures. Your submission will be evaluated based on Originality, Accuracy, Relevance, Clarity, and Data Visualization/Tables, with a score ranging from 0 (low) to 10 (high) for each component.
