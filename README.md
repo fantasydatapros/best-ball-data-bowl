@@ -68,6 +68,7 @@ To be eligible, all notebooks submitted must at least use data from Best Ball Ma
 * August 1st: Notebook submissions due by this date; Make sure to follow submission guidlines!
 
 * August (Date TBD): Finalist round on <a target="_blank" href="https://www.youtube.com/@PeterOverzet">Peter Overzet's Youtube channel</a>. Finalists will have the opportunity to present their findings on stream and support their conclusions.
+
 * August (Date TBD): Winning team announced.
 
 # Prizes
