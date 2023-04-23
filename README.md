@@ -65,14 +65,10 @@ To be eligible, all notebooks submitted must at least use data from Best Ball Ma
 
 * May 1st: Prize Announced
 
-* June 15th: Participants must submit their proposed topics by this date. No additional contest entries allowed following this date, so make sure you give yourself time to come up with a topic!
+* August 1st: Notebook submissions due by this date; Make sure to follow submission guidlines!
 
-* July 1st: Notebook submissions due by this date; Make sure to follow submission guidlines!
-
-* July 15th: Finalists announced. 5 Finalists teams/individuals will be chosen to announce to the final round on August 1st.
-
-* August 1st: Finalist round on <a target="_blank" href="https://www.youtube.com/@PeterOverzet">Peter Overzet's Youtube channel</a>. Finalists will have the opportunity to present their findings on stream and support their conclusions.
-* August 15th: Winning team announced.
+* August (Date TBD): Finalist round on <a target="_blank" href="https://www.youtube.com/@PeterOverzet">Peter Overzet's Youtube channel</a>. Finalists will have the opportunity to present their findings on stream and support their conclusions.
+* August (Date TBD): Winning team announced.
 
 # Prizes
 
