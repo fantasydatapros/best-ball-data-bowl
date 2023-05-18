@@ -89,7 +89,7 @@ Data here is again split up into regular season and postseason. There are multip
 | team_pick_number         | int           | Team pick number as round                                 | 13                                   |
 | pick_points              | float         | The amount of points attributed to the team in that round | 11.9                                 |
 | roster_points            | float         | the team's total points in that round                     | 138.52                               |
-| playoff_team             | int           | True/False value. 1 if entry made the playoffs            | 1                                    |
+| playoff_team             | int           | 1=Regular season, 0=Playoffs. Only tells you the round            | 1                                    |
 
 \* **Hayden Winks**: `tournament_round_number` is 1 = "regular season", 2 = second round, 3 = semifinals, 4 = finals. **Ben**: Note that the data has already been partioned for you based on this column. For example, if you are working on a regular season CSV, then `tournament_round_number` will be 1.
 
