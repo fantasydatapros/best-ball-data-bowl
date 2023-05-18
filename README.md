@@ -73,4 +73,6 @@ To be eligible, all notebooks submitted must at least use data from Best Ball Ma
 
 # Prizes
 
-As of April 14th, we are still working on putting together a cash prize fund, but the prize will be a combo of cash + merch.
+Cash Prize of $1,000 for the winner plus merch (pictured below) for anyone who makes a valid submission:
+
+<img src="https://pbs.twimg.com/media/FwLd77DWwAE2nUN?format=jpg&name=medium">
