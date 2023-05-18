@@ -93,6 +93,8 @@ Data here is again split up into regular season and postseason. There are multip
 
 \* **Hayden Winks**: `tournament_round_number` is 1 = "regular season", 2 = second round, 3 = semifinals, 4 = finals. **Ben**: Note that the data has already been partioned for you based on this column. For example, if you are working on a regular season CSV, then `tournament_round_number` will be 1.
 
+**Ben**: Not that here the meaning of `playoff_team` changed season over season. In 2022 / BBMII, this column told you whether a team made the playoffs or not. In the BBMIII data, however, this column only tells you if the round you're looking at is a playoff round or not. Note that we've already partioned the data for you here based on that column, so if you're working with a regular season CSV, this column will be all 0s (in contrast to BBMII data, this does not tell you whether that entry made the playoffs or not). 
+
 ## File Structure:
 
 File structure for the datasets is below. You'll notice that for 2021 and 2022, the data is partioned in "parts". These are equal slices of the data which will need to be concatenated together. We did it this way because Github has a max file upload limit. 
