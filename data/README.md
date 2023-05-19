@@ -90,6 +90,7 @@ Data here is again split up into regular season and postseason. There are multip
 | pick_points              | float         | The amount of points attributed to the team in that round | 11.9                                 |
 | roster_points            | float         | the team's total points in that round                     | 138.52                               |
 | playoff_team             | int           | 1=Regular season, 0=Playoffs. Only tells you the round            | 1                                    |
+| draft_entry_id (only in postseason CSVs) | string | **ignore this column or drop** | |
 
 \* **Hayden Winks**: `tournament_round_number` is 1 = "regular season", 2 = second round, 3 = semifinals, 4 = finals. **Ben**: Note that the data has already been partioned for you based on this column. For example, if you are working on a regular season CSV, then `tournament_round_number` will be 1.
 
