@@ -29,24 +29,6 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install nbconvert
-
-    - name: Setup R
-      run: |
-        sudo apt-get install -y pandoc
-        sudo apt-get install -y r-base
-
-    - name: Cache R packages
-      uses: actions/cache@v2
-      with:
-        path: /usr/local/lib/R/site-library
-        key: ${{ runner.os }}-R-${{ hashFiles('**/DESCRIPTION') }}
-        restore-keys: |
-          ${{ runner.os }}-R-
-          
-    - name: Install R Dependencies
-      run: |
-        sudo Rscript -e "install.packages(c('remotes', 'withr', 'tidyverse'), repos = 'http://cran.rstudio.com/')"
-        sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', remotes::install_github('rstudio/rmarkdown'))"
     
     - name: Convert Notebooks
       run: |
