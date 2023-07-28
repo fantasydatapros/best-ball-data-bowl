@@ -45,9 +45,9 @@ jobs:
           
     - name: Install R Dependencies
       run: |
-        sudo Rscript -e "install.packages(c('remotes', 'withr'), repos = 'http://cran.rstudio.com/')"
+        sudo Rscript -e "install.packages(c('remotes', 'withr', 'tidyverse'), repos = 'http://cran.rstudio.com/')"
         sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', remotes::install_github('rstudio/rmarkdown'))"
-
+    
     - name: Convert Notebooks
       run: |
         for notebook in submissions/*.ipynb; do
