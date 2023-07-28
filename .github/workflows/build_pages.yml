@@ -29,7 +29,7 @@ jobs:
 
     - name: Convert Notebooks and Rmds
       run: |
-        mkdir dist
+        mkdir -p dist
         for notebook in submissions/**/*.ipynb; do
             jupyter nbconvert --to html $notebook --output-dir dist
         done
