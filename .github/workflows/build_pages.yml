@@ -1,4 +1,4 @@
-name: Build Pages
+name: Build .ipnyb and .rmd files to HTML in dist
 
 on:
   push:
@@ -30,9 +30,9 @@ jobs:
     - name: Convert Notebooks and Rmds
       run: |
         mkdir -p dist
-        for notebook in submissions/**/*.ipynb; do
+        for notebook in submissions/*.ipynb; do
             jupyter nbconvert --to html $notebook --output-dir dist
         done
-        for rmd in submissions/**/*.Rmd; do
+        for rmd in submissions/*.Rmd; do
             sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', rmarkdown::render('$rmd', output_dir = 'dist'))"
         done
