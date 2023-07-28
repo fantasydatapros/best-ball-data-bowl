@@ -17,22 +17,47 @@ jobs:
       with:
         python-version: 3.8
 
-    - name: Install Dependencies
+    - name: Cache pip packages
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install Python Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install nbconvert
+
+    - name: Setup R
+      run: |
         sudo apt-get install -y pandoc
         sudo apt-get install -y r-base
-        sudo Rscript -e "install.packages('remotes', repos = 'http://cran.rstudio.com/')"
-        sudo Rscript -e "install.packages('withr', repos = 'http://cran.rstudio.com/')"
+
+    - name: Cache R packages
+      uses: actions/cache@v2
+      with:
+        path: /usr/local/lib/R/site-library
+        key: ${{ runner.os }}-R-${{ hashFiles('**/DESCRIPTION') }}
+        restore-keys: |
+          ${{ runner.os }}-R-
+          
+    - name: Install R Dependencies
+      run: |
+        sudo Rscript -e "install.packages(c('remotes', 'withr'), repos = 'http://cran.rstudio.com/')"
         sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', remotes::install_github('rstudio/rmarkdown'))"
 
-    - name: Convert Notebooks and Rmds
+    - name: Convert Notebooks
       run: |
-        mkdir -p dist
         for notebook in submissions/*.ipynb; do
-            jupyter nbconvert --to html $notebook --output-dir dist
+            jupyter nbconvert --to html "$notebook" --output-dir dist
         done
+
+    - name: Convert Rmds
+      run: |
         for rmd in submissions/*.Rmd; do
             sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', rmarkdown::render('$rmd', output_dir = 'dist'))"
         done
+
+        
