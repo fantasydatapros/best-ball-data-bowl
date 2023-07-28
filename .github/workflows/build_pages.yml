@@ -23,7 +23,9 @@ jobs:
         pip install nbconvert
         sudo apt-get install -y pandoc
         sudo apt-get install -y r-base
-        Rscript -e "install.packages('rmarkdown')"
+        sudo Rscript -e "install.packages('remotes', repos = 'http://cran.rstudio.com/')"
+        sudo Rscript -e "install.packages('withr', repos = 'http://cran.rstudio.com/')"
+        sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', remotes::install_github('rstudio/rmarkdown'))"
 
     - name: Convert Notebooks and Rmds
       run: |
@@ -32,5 +34,5 @@ jobs:
             jupyter nbconvert --to html $notebook --output-dir dist
         done
         for rmd in submissions/**/*.Rmd; do
-            Rscript -e "rmarkdown::render('$rmd', output_dir = 'dist')"
+            sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', rmarkdown::render('$rmd', output_dir = 'dist'))"
         done
