@@ -54,10 +54,10 @@ jobs:
             jupyter nbconvert --to html "$notebook" --output-dir dist
         done
 
-    - name: Convert Rmds
-      run: |
-        for rmd in submissions/*.Rmd; do
-            sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', rmarkdown::render('$rmd', output_dir = 'dist'))"
-        done
+    # - name: Convert Rmds
+    #   run: |
+    #     for rmd in submissions/*.Rmd; do
+    #         sudo Rscript -e "withr::with_libpaths(new = '/usr/local/lib/R/site-library', rmarkdown::render('$rmd', output_dir = 'dist'))"
+    #     done
 
         
