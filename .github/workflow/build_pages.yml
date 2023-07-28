@@ -1,0 +1,36 @@
+name: Build Pages
+
+on:
+  push:
+    branches:
+      - master  # or your preferred branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nbconvert
+        sudo apt-get install -y pandoc
+        sudo apt-get install -y r-base
+        Rscript -e "install.packages('rmarkdown')"
+
+    - name: Convert Notebooks and Rmds
+      run: |
+        mkdir dist
+        for notebook in submissions/**/*.ipynb; do
+            jupyter nbconvert --to html $notebook --output-dir dist
+        done
+        for rmd in submissions/**/*.Rmd; do
+            Rscript -e "rmarkdown::render('$rmd', output_dir = 'dist')"
+        done
