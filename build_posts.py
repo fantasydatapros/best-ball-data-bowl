@@ -18,7 +18,7 @@ for ipynb_file in ipynb_files:
     output_file = os.path.join(output_dir, ipynb_file.rsplit('.', 1)[0] + '.md')
 
     # Run nbconvert command
-    subprocess.run(['jupyter', 'nbconvert', '--to', 'markdown', input_file, '--output-dir', output_dir])
+    subprocess.run(['jupyter', 'nbconvert', '--to', 'html', input_file, '--output-dir', output_dir])
 
     # Move the image folder to posts
     image_folder = os.path.join(input_dir, ipynb_file.rsplit('.', 1)[0] + '_files')
