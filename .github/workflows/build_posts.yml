@@ -32,7 +32,6 @@ jobs:
         git config --global user.email 'github-actions@github.com'
         git add posts/*
         git commit -m 'Update posts' || exit 0
-        git push origin master
-
+        git push https://${{ secrets.GH_PAT }}@github.com/fantasydatapros/best-ball-data-bowl.git master
 
         
