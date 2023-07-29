@@ -1,2 +1,5 @@
 include:
   - posts
+collections:
+  posts:
+    output: true
