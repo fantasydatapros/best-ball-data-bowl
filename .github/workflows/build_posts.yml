@@ -30,8 +30,16 @@ jobs:
       run: |
         git config --global user.name 'GitHub Actions'
         git config --global user.email 'github-actions@github.com'
+        git checkout -b update-posts
         git add posts/*
         git commit -m 'Update posts' || exit 0
-        git push https://${{ secrets.GH_PAT }}@github.com/fantasydatapros/best-ball-data-bowl.git master
+        git push https://${{ secrets.GH_PAT }}@github.com/fantasydatapros/best-ball-data-bowl.git update-posts
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v3
+      with:
+        token: ${{ secrets.GH_PAT }}
+        title: 'Update posts'
+        body: 'Automatic update of posts'
 
         
