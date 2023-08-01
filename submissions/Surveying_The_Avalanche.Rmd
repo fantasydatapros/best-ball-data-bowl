@@ -1433,7 +1433,7 @@ rbind(bbm3_wr_heavy_through7, bbm3_wr_heavy_through9) %>%
               decimals = 2) %>%
   # Footnotes
   tab_footnote(
-    footnote = "Utilization is how often drafters had X wide receivers through seven or ten rounds.",
+    footnote = "Utilization is how often drafters had X wide receivers through seven or nine rounds.",
     locations = cells_column_labels(columns = c("utilization"))
   ) %>%
   tab_footnote(
@@ -1466,7 +1466,7 @@ rbind(bbm3_wr_heavy_through7, bbm3_wr_heavy_through9) %>%
 ```
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
-knitr::include_graphics("https://raw.githubusercontent.com/thefalkon-1/bbm-data-bowl-tables/main/table6.png", dpi = 200)
+knitr::include_graphics("https://raw.githubusercontent.com/thefalkon-1/bbm-data-bowl-tables/main/table6v2.png", dpi = 200)
 ```
 
 Before drawing conclusions, let's also look at BBM2.
@@ -1563,7 +1563,7 @@ rbind(bbm2_wr_heavy_through7, bbm2_wr_heavy_through9) %>%
               decimals = 2) %>%
   # Footnotes
   tab_footnote(
-    footnote = "Utilization is how often drafters had X wide receivers through seven or ten rounds.",
+    footnote = "Utilization is how often drafters had X wide receivers through seven or nine rounds.",
     locations = cells_column_labels(columns = c("utilization"))
   ) %>%
   tab_footnote(
@@ -1591,7 +1591,7 @@ rbind(bbm2_wr_heavy_through7, bbm2_wr_heavy_through9) %>%
 ```
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
-knitr::include_graphics("https://raw.githubusercontent.com/thefalkon-1/bbm-data-bowl-tables/main/table7.png", dpi = 200)
+knitr::include_graphics("https://raw.githubusercontent.com/thefalkon-1/bbm-data-bowl-tables/main/table7v2.png", dpi = 200)
 ```
 
 The following conclusions should be taken with a grain of salt, as the sample size is limited to 5% of drafts from BBM2 and BBM3. While drafting either four or five WRs by Round 7 and Round 9 underperformed how a team scored during the regular season, both strategies appear to remain optimal in WR-heavy rooms. Notably, drafting more WRs and drafting them earlier [seemed optimal for regular season scoring in BBM3](https://underdognetwork.com/_next/image?url=https%3A%2F%2Fimages.ctfassets.net%2Fl8eoog2wur2i%2F6UwDhRFtH21lpnaHKojFrV%2Fca6915069d920fc53bd1c444cd51466c%2FBBM3WROptimal.png&w=3840&q=75), but that held less firmly in WR-heavy rooms.
