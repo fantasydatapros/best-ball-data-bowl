@@ -1,0 +1,810 @@
+---
+title: Using Expected Positional Loss (EPL) to Find Positional Value in Past and Future
+  Best Ball Drafts
+author: "And Why You Shouldnt Always Draft the Positions With the Most Immediate Value"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, warning = FALSE, message = FALSE, cache=TRUE)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(here)
+library(nflfastR)
+library(lme4)
+library(glmnet)
+library(gt)
+library(gtsummary)
+library(gtExtras)
+library(stringdist)
+library(fuzzyjoin)
+library(caret)
+library(xgboost)
+library(pbapply)
+library(ggridges)
+library(XML)
+library(RCurl)
+library(stringr)
+library(rlist)
+library(ggpubr)
+```
+
+#### Twitter: [@NickBachelder2](https://twitter.com/NickBachelder2)
+#### LinkedIn: [Nick Bachelder](https://www.linkedin.com/in/nbachelder/)
+#### GitHub Link [For Codeless Version](https://github.com/nickb1125/best-ball_data_bowl_pdf/blob/main/Using%20Expected%20Positional%20Loss%20(EPL)%20to%20Find%20Positional%20Value%20in%20Past%20and%20Future%20Best%20Ball%20Drafts.pdf)
+
+## Paper Summary:
+
+- While stacking, variance based drafting methods, and other trending topics in best ball can increase success probabilities marginally, the only true way to significantly increase playoff rates (i.e. up to 35%) is by selecting the best players.
+- Value-based drafting is ideal for acheiving such goals, but is often ridiculed as variance in player fantasy predictions is so high.
+- **Best ball data is valuable beyond tracking success, it allows us to model the true distributional relationship between ADP and true pick numbers, which lets us calculate probabilities that players will be picked by different drafting points.**
+- **Knowing the distributions of when when players are picked allow us to create EPL Curves ("Expected Positional Loss") and plot "Average Per Turn Expected Positional Loss" (AEPL) over time to recognize where the best positional players are picked**. It also allows us to predict where positional value may be in the upcoming draft.
+- While using greedy approaches (i.e. selecting the highest positional value each turn) are correlated with success, the optimal drafting strategy is NOT PURELY immediate value over replacement. **Much like we use value over replacement, or in our case AEPL, to "normalize" the differences in points scored by different positions, we should also be "normalizing" for the fact that we need to select different numbers of each position. I introduce "Roster EPL Maximization" to do such normalization and discover where positional value truly is for each draft, including 2023.**
+
+## Introduction
+
+### Given everything you know about the 2021 NFL season, you are given the following choice: would you rather own a team with Travis Kelce (RB2) or with Rob Gronkowski (RB5)?
+
+*It certainly feels right to answer Kelce, who had a regular season fantasy total about 90 points higher than Gronk's - but that would be the wrong decision*. Teams with Kelce made it to the playoffs ~13% of the time and teams with Gronk made it ~29% of the time in 2021. Why? The answer lies in the fact that Gronk had more positional value in the 2021 best ball draft than Kelce. Kelce was overvalued at 6th in ADP in 2021, coming off a record breaking season the prior year, while Gronk was a steal for his value at 155th ADP. This means teams that picked Kelce lost the oppurtunity at better value players in the first round, while those that chose Gronk did not. In other words, there was "positional value" at tight end in the 12th round, but NOT in the 1st round.
+
+This logic is exactly why we later find that owning Cooper Kupp in 2021 increased playoff advance rates more than owning any other player in 2021 or 2022, as teams with Kupp made it to the playoffs a whopping 48% of the time. Kupp had a record breaking season, but his value as a fantasy player is mostly due to him having been criminaly undervalued at an ADP of 42. Teams that got Kupp still got an opportunity to get great value in their first two picks, and then fantastic value with picking Kupp third. 
+
+### Knowing this, here's another question: given you could redo the first pick of your 2021 best ball draft and you could pick between Cooper Kupp and Johnathon Taylor, who would you pick?
+
+*The answer should undoubtedly be Johnathon Taylor* which may be a bit confusing, because as previously mentioned, Kupp brought up playoff advance rates more than any other player. Here's why - Kupp's value is not exclusively in his high scoring season, but also due to the fact that he was available in the third round. Picking him first would forgo the value of other first round players for value that could be drafted later on. 
+
+Clearly, tracking which positions have "positional value" at which times during drafts is important. Additionally, while variance-based drafting methods, stacking and other strategies often dominate the discourse of best ball strategy, the only way to significantly increase playoff likelihoods (i.e. by 20% or more) is to draft the correct players. While it is hard to predict individual fantasy performance with low error, we may be able to identify trends of where value was positionally over the past few years, increasing our chances of drafting those season-making players like Kupp.
+
+In this paper, I accomplish this through creating what I call the "EPL (Expected Positional Loss) Curve," which is a system I've developed to visualize where positional value lies on the best ball drafting slate, and how that is changing over time.
+
+I'll start by reading in data, and joining regular season-long fantasy totals. Here, I also plot playoff advance rate by true positional ranking to demostrate that pure fantasy points are NOT a great indicator of fantasy value because they do not account for ADP value.
+
+```{r}
+# Load Fantasy Points From NFLFastR
+fantasy_points_loader <- function(years, weekly = FALSE) {
+  ret <- lapply(years, function(year) {
+    true_fantasy_totals <- nflfastR::load_player_stats(year) %>%
+    filter(season_type == "REG") %>%
+    mutate(player_display_name = gsub("[.]", "", player_display_name)) %>%
+    # Make a few name fixes
+    mutate(player_display_name = case_when(player_display_name == "Gabe Davis" ~ "Gabriel Davis",
+                                           player_display_name == "Josh Palmer" ~ "Joshua Palmer",
+                                           TRUE ~ player_display_name)) %>%
+    mutate(position_group = case_when(player_display_name == "Juwan Johnson" ~ "WR",
+                                      TRUE ~ position_group)) %>%
+      mutate(player_id = paste0(player_display_name, position_group))
+    true_fantasy_totals <- true_fantasy_totals %>%
+      #Sum weekly points to get reg season points
+      group_by(player_id) %>% mutate(total_fantasy_points = sum(fantasy_points)) %>% ungroup() %>%
+      dplyr::select(player_id, player_display_name, total_fantasy_points) %>% unique()
+    return(true_fantasy_totals)
+  })
+  names(ret) <- paste0("s", years)
+  return(ret)
+}
+fantasy_points_list <- fantasy_points_loader(years = c(2021, 2022))
+
+# Read data 2021
+dat_21 <- do.call(rbind, lapply(paste0(here::here("data/2021/regular_season/part_0"), seq(0, 5), ".csv"), function(x) {
+  read.csv(x)}))  %>%
+    dplyr::select(playoff_team, draft_id, draft_time, tournament_entry_id, overall_pick_number, pick_order, 
+                  player_name, position_name, projection_adp) %>%
+    mutate(player_name = gsub("[.]", "", player_name)) %>%
+    mutate(player_id = paste0(player_name, position_name)) %>%
+  # Join Fantasy Points
+  left_join(as.data.frame(fantasy_points_list["s2021"][[1]])) %>%
+  mutate(total_fantasy_points = ifelse(is.na(total_fantasy_points), 0, total_fantasy_points))
+
+# Read data 2022
+dat_22_mixed <- do.call(rbind, lapply(paste0(here::here("data/2022/regular_season/mixed/part_0"), seq(0, 8), ".csv"), function(x) {
+  read.csv(x)}))  %>%
+    dplyr::select(playoff_team, draft_id, draft_time, tournament_entry_id, overall_pick_number, pick_order, 
+                  player_name, position_name, projection_adp) %>%
+    mutate(player_name = gsub("[.]", "", player_name)) %>%
+    mutate(player_id = paste0(player_name, position_name)) %>%
+  dplyr::select(player_name, player_id, tournament_entry_id, position_name, position_name, projection_adp, overall_pick_number)
+
+dat_22_fast_p1 <- do.call(rbind, lapply(paste0(here::here("data/2022/regular_season/fast/part_0"), seq(0, 9), ".csv"), function(x) {
+  read.csv(x)}))  %>%
+    dplyr::select(playoff_team, draft_id, draft_time, tournament_entry_id, overall_pick_number, pick_order, 
+                  player_name, position_name, projection_adp) %>%
+    mutate(player_name = gsub("[.]", "", player_name)) %>%
+    mutate(player_id = paste0(player_name, position_name)) %>%
+  dplyr::select(player_name, player_id, tournament_entry_id, position_name, position_name, projection_adp, overall_pick_number)
+
+dat_22_fast_p2 <- do.call(rbind, lapply(paste0(here::here("data/2022/regular_season/fast/part_"), seq(10, 26), ".csv"), function(x) {
+  read.csv(x)}))  %>%
+    dplyr::select(playoff_team, draft_id, draft_time, tournament_entry_id, overall_pick_number, pick_order, 
+                  player_name, position_name, projection_adp) %>%
+    mutate(player_name = gsub("[.]", "", player_name)) %>%
+    mutate(player_id = paste0(player_name, position_name)) %>%
+  dplyr::select(player_name, player_id, tournament_entry_id, position_name, position_name, projection_adp, overall_pick_number)
+
+dat_22_post <- do.call(rbind, lapply(paste0(here::here("data/2022/post_season/quarterfinals/part_0"), seq(1, 9), ".csv"), read.csv))
+playoff_teams <- unique(dat_22_post$tournament_entry_id)
+
+# Join all formats and add fantasy points
+dat_22 <- rbind(dat_22_mixed, dat_22_fast_p1, dat_22_fast_p2) %>%
+  left_join(as.data.frame(fantasy_points_list["s2022"][[1]]), by = "player_id") %>%
+  mutate(total_fantasy_points = ifelse(is.na(total_fantasy_points), 0, total_fantasy_points),
+         playoff_team = ifelse(tournament_entry_id %in% playoff_teams, 1, 0))
+
+combined <- rbind(dat_21 %>% dplyr::select(playoff_team, position_name, player_id, player_name, total_fantasy_points) %>% mutate(year = 2021), 
+                  dat_22 %>% dplyr::select(playoff_team, position_name, player_id, player_name, total_fantasy_points) %>% mutate(year = 2022))
+table_df <- combined %>%
+  left_join(combined %>% dplyr::select(year, position_name, player_id, player_name, total_fantasy_points) %>% distinct() %>%
+              group_by(year, position_name) %>%
+              mutate(position_rank = rank(desc(total_fantasy_points))), by = c("year", "position_name", "player_id", "player_name", "total_fantasy_points")) %>%
+  filter(position_rank <= 5) %>%
+  group_by(year, player_name, position_name, position_rank, player_id, total_fantasy_points) %>%
+  summarise(percent_playoffs= mean(playoff_team)) %>%
+  ungroup()
+
+# Plot 2021 Player Advance Rates for top 5 positional players
+p1 <- table_df %>% filter(position_name != "FB", year == 2021)%>% mutate(value = paste0(round(percent_playoffs, 2)*100, "%", " \n(", player_name, ")")) %>%
+  dplyr::select(position_name, position_rank, value, percent_playoffs) %>% 
+  ggplot(aes(x = position_name, y = position_rank, fill = position_name)) +
+  geom_tile(aes(alpha = percent_playoffs)) +
+  geom_text(aes(label = value)) +
+  theme_classic() +
+  ggtitle(label = "2021 Playoff Advance Rates by Drafted Player Positional Ranking",
+              subtitle = "Player Value is Not Perfectly Correlated with Positional Ranking") + theme(legend.position = "none") + xlab("Position") +
+  ylab("Positional Rank")
+# Plot 2022 Player Advance Rates for top 5 positional players
+p2 <- table_df %>% filter(position_name != "FB", year == 2022)%>% mutate(value = paste0(round(percent_playoffs, 2)*100, "%", " \n(", player_name, ")")) %>%
+  dplyr::select(position_name, position_rank, value, percent_playoffs) %>% 
+  ggplot(aes(x = position_name, y = position_rank, fill = position_name)) +
+  geom_tile(aes(alpha = percent_playoffs)) +
+  geom_text(aes(label = value)) +
+  theme_classic() +
+  ggtitle(label = "2022 Playoff Advance Rates by Drafted Player Positional Ranking",
+              subtitle = "Player Value is Not Perfectly Correlated with Positional Ranking") + theme(legend.position = "none") + xlab("Position") +
+  ylab("Positional Rank")
+
+p1
+p2
+```
+
+## The Issue With Value Based Drafting With VOPR (Value of Positional Replacement): Recognizing Imminent Drops In Positional Value.
+
+
+Value-based drafting is often associated with the commonly used "Value Over Replacement Player (VORP)". Used often for its relatively simple design and ease of calculation, VORP attempts to "normalize" the differences in average fantasy points scored by different positions in order to rank available players in terms of value (i.e. since you are required to have a set number of each position, it is not optimal to just draft the highest projected quarterbacks first). To do so, VOPR usually simply subtracts the fantasy points of the worst positional starting player of a position from each player of that position's fantasy totals.
+
+While useful, I have three serious qualms with VORP that I aim to use the available best ball data to solve: 
+
+(1) **VOPR does not account for the average draft position (ADP) of any player**, meaning it does not recognize imminent drops in positional value, nor does **it recognize that selecting a great underrated player far before his ADP results in lost value in early picks**.
+
+(2) Since the degree of skill can be vastly different between the best positional player and the worst starting positional player is always very different between positions (i.e. the relative skill difference between the best and worst starting quarterback may be much more severe than the skill difference of the best and worst starting running back), **VOPR has inconsistent meaning across different positions**.
+
+(3) Since the distribution of positional tiers is dynamic in the NFL year to year, the value of the "worst starting player" changes each year, causing **VORP to be a have inconsistent meaning over time**.
+
+An alternative metric that is not as widely used since it is harder to calculate without making assumptions, is "Value Over Next Available (VONA)," which estimates the projected best available positional player a set number of picks ahead of time and subtracts that players projected fantasy totals from all players of the same position. **VONA solves all three of the issues above**, but VONA is usually much more difficult to calculate due to difficulty if projecting the best available player in a set number of turns (especially if that set number of turns is high). 
+
+**Best Ball data allows us to analyze the distribution of how true pick number relates to ADP, and model probabilities that players will be available in N turns based on ADP. This lets us easily calculate VONA for a range of different turn lengths and plot such value in what I call the "Expected Positional Loss (EPL) Curve."**
+
+## True Pick Distribution by ADP
+
+Let's look at the distributions of true draft numbers by ADP value and position in the combined 2021 and 2022 draft data. Looks like distributions by position name are similar, but quarterbacks are in general more dispersed than WR, RB, & TE.
+
+```{r}
+# Combine 2021 and 2022 data to get true pick distributions by adp overall
+combined_2 <- rbind(dat_21 %>% dplyr::select(overall_pick_number, projection_adp, position_name) %>% mutate(year = 2021), 
+                  dat_22 %>% dplyr::select(overall_pick_number, projection_adp, position_name) %>% mutate(year = 2022)) %>%
+  slice_sample(prop = 0.05)
+
+# Plot true pick distributions by adp
+p3 <- combined_2 %>%
+  mutate(projection_adp = ceiling(projection_adp)) %>%
+  filter(projection_adp %in% seq(10, 200, by = 10))  %>%
+  dplyr::rename(`Position Name` = position_name) %>%
+  ggplot() + 
+  geom_density_ridges(aes(x = overall_pick_number, y = as.factor(projection_adp), color = `Position Name` , fill = `Position Name`), alpha = 0.1) +
+  xlab("True Pick Number") + ylab("Average Draft Position (ADP)") + ggtitle("Distribution of True Pick Number by ADP",
+                                                                            subtitle = "True Pick Number by ADP is Normally Distributed with Increasing Variance") +
+  theme_classic() 
+
+# Plot variance of true pick distribution by ADP
+p4 <- combined_2 %>% filter(position_name != "FB") %>%
+  mutate(projection_adp = ceiling(projection_adp)) %>%
+  group_by(projection_adp, position_name) %>%
+  summarise(var_at_adp = var(overall_pick_number)) %>%
+  ungroup() %>%
+  dplyr::rename(`Position Name` = position_name) %>%
+  ggplot() + 
+  geom_line(aes(x = projection_adp, y = var_at_adp, color = `Position Name`), alpha = .5) +
+  xlab("ADP") + ylab("Variance of True Pick Number") +
+  ggtitle("Variance of Pick Number by ADP") + ylim(1, 200) + xlim(1, 200) +
+  geom_abline(slope=1, intercept = 0) +
+  theme_classic()
+
+p3
+p4
+```
+
+**Due to our high sample size of picks, we can use these distributions to calculate cumulative pick probabilities by rounded ADP**. For simplicity, we will only use rounded ADP to calculate cumulative pick probabilities since position stratified distributions look relatively similar in most places. Note that we could try to generalize/model these distributions, but for our purposes its not very useful as we have well defined exact distributions by ADP. **If we were to generalize a position-agnostic model (for future work) it looks like the relationship between ADP and True Pick Number could be modeled with a poisson regression with slight under-dispersion (i.e. the variance is slightly less than the ADP for each group - $\text{True Pick #} \sim Pois(ADP) \text{ would be slightly underdispersed}$)**. For now, we continue with true distributions.
+
+## Cumulative Pick Probabilties by ADP
+
+Let's calculate the average ADP of each player during 2021 and 2022 to use. Also let's create functions that calculate the cumulate pick probability based on existing ADP to true pick distributions from before.
+
+```{r}
+# Get average adp values for each player in 2021
+all_draft_players_with_adp_avgs_21 <- dat_21 %>%
+  group_by(player_name) %>%
+  summarise(position_name = max(position_name), projection_adp = mean(projection_adp), total_fantasy_points = max(total_fantasy_points)) %>%
+  ungroup() %>%
+  filter(projection_adp != 0)
+# Get average adp values for each player in 2022
+all_draft_players_with_adp_avgs_22 <- dat_22 %>%
+  group_by(player_name) %>%
+  summarise(position_name = max(position_name), projection_adp = mean(projection_adp), total_fantasy_points = max(total_fantasy_points)) %>%
+  ungroup() %>%
+  filter(projection_adp != 0)
+
+# Combine all projected ADP with true pick number
+combined_3 <- rbind(dat_21 %>% dplyr::select(overall_pick_number, projection_adp) %>% 
+                      # Add one to pick number since we want prob that player is picked BY that turn not including on it
+                      mutate(overall_pick_number = overall_pick_number + 1) %>% mutate(year = 2021), 
+                  dat_22 %>% dplyr::select(overall_pick_number, projection_adp)%>% 
+                    mutate(overall_pick_number = overall_pick_number + 1) %>% mutate(year = 2022))
+
+# Create function to use the true cumulative density of pick distributions 
+# to get cumulative pick probabilities for each turn
+get_prob_adp_picked_vector <- function(player_adp) {
+  true <- (combined_3 %>% filter(ceiling(projection_adp) == ceiling(player_adp)))$overall_pick_number
+  prob_func = ecdf(true)
+  prob <- unlist(lapply(seq(1,216), prob_func))
+  return(prob)
+}
+
+# Create data frame of all projected ADP cumulative pick probabilities
+general_pick_probs_by_adp <- data.frame(projection_adp = unlist(lapply(seq(1, 216), rep, times = 216)), 
+                                        theoretical_pick_number = rep(seq(1, 216), times = 216)) %>%
+  mutate(prob_picked = unlist(lapply(seq(1,216), get_prob_adp_picked_vector))) 
+
+# Plot Cumulative pick probabiltiies by a range of ADPs
+general_pick_probs_by_adp %>%
+  filter(projection_adp %% 40 == 0 | projection_adp == 3) %>%
+  mutate(projection_adp = as.factor(projection_adp)) %>%
+  dplyr::rename(`ADP` = projection_adp) %>%
+  ggplot() +
+  geom_line(aes(x = theoretical_pick_number, y = prob_picked, color = ADP)) +
+  ggtitle("Cumulative Probability of Being Picked by ADP") + xlab("Pick Number") + ylab("Cumulative Probability of Being Picked") +
+  scale_color_brewer() +
+  theme_classic()
+```
+
+## EPL (Expected Positional Loss)
+
+Now that we have cumulative pick probabilties for players in 2021 and 2022, we can start to calculate our "EPL Curve." The EPL curve plots the maximum positional VONA for each position ("WR", "TE", "QB", "RB") using different ranges of comparison availability to calculate. EPL is calculated with the below math. 
+
+
+Let's break that down..
+
+$$\text{EPL}^{1-N}_{POS} \text{ (Expected Positional Loss From Turn 1 to Turn N)} = \\ [\text{Total Fantasy Points of Most Valuable Positional Player}]  - E[\text{Maximum season fantasy points available at pick N}]$$
+
+where...
+
+$$E[\text{Maximum fantasy points available at pick N}] = \\\sum^{\substack{p_i \in\text{All remaining}\\ \text{players in position}}} [(p_i \text{ Season Fantasy Points}) \cdot P(p_i \text{ has highest available expected positional fantasy at pick N})]$$
+
+and...
+
+$$P(p_i \text{ has highest available expected positional fantasy at pick N}) = \\P(p_i \text{ unpicked next turn}) \cdot P(\text{All players with higher projection picked by next turn})$$
+
+**The EPL curve simply plots positional expected positional loss from the beginning of the draft to various turns throughout!** Below is the implementation of the calculations above for $\text{EPL}^{1-N}_{POS} \text{ (Expected Positional Loss From Turn 1 to Turn N)}$ for each $N \in [1, 100]$ turns in the draft! **In general, we will focus on the first 8 rounds for the rest of the paper, since this is where usual starters are drafted in best ball.**
+
+
+Below we implement a function to calculate $\text{EPL}_{POS, N}$ for each player during each theoretical turn:
+```{r}
+# Calculate the expected positional loss from the first turn to all 216 turns.
+calculate_all_EPL <- function(draft_board) {
+  ret <- draft_board  %>% filter(position_name != "FB") %>% 
+    dplyr::select(player_name, projection_adp, total_fantasy_points, position_name) %>%
+    # Set ADP to integers for distributions
+    mutate(projection_adp = ceiling(projection_adp)) %>%
+    group_by(position_name) %>%
+    ungroup() %>%
+    # Merge in cumulative pick probabilties by ADP
+    left_join(general_pick_probs_by_adp, by = c("projection_adp")) %>%
+    group_by(theoretical_pick_number, position_name) %>%
+    # Order by true positional value (i.e. fantasy points)
+    arrange(theoretical_pick_number, position_name, desc(total_fantasy_points)) %>%
+    # Calculate the probability that all more valuable positional players are picked
+    mutate(prob_all_higher_ranked_positional_players_picked = cumprod(dplyr::lag(prob_picked, default = 1))) %>%
+    ungroup() %>%
+    # Calculate the probability a player is best at his position on current turn
+    mutate(prob_player_is_best_at_pos= (1-prob_picked)*prob_all_higher_ranked_positional_players_picked) %>%
+    # Calculate expected max positional value at turn
+    mutate(player_expected_value_if_best = total_fantasy_points*prob_player_is_best_at_pos) %>% 
+    group_by(theoretical_pick_number, position_name) %>%
+    mutate(expected_max_available_value_at_position = sum(player_expected_value_if_best)) %>% 
+    ungroup() %>%
+    # Subtract each players fantasy points from max positional value on every turn
+    mutate(EPL_for_player = total_fantasy_points - expected_max_available_value_at_position) %>%
+    group_by(theoretical_pick_number, position_name) %>%
+    # Calculate EPL as expected positional loss on each turn compared to best positional player on turn 1
+    # Also calculate expected and possible best positional players available at each turn
+    mutate(EPL = max(total_fantasy_points) - expected_max_available_value_at_position,
+           expected_best_available_player_at_position = paste0(player_name[which.max(prob_player_is_best_at_pos)][1], ' (', 
+                                                               round(max(prob_player_is_best_at_pos)[1]*100,2), '%)'),
+           possible_best_available_player_at_position_upper = 
+             paste0(player_name[prob_player_is_best_at_pos > 0.1 & total_fantasy_points==max(total_fantasy_points[prob_player_is_best_at_pos > 0.1])][1], ' (', 
+           round(prob_player_is_best_at_pos[prob_player_is_best_at_pos > 0.1 & 
+                                              total_fantasy_points==max(total_fantasy_points[prob_player_is_best_at_pos > 0.1])][1]*100,2), '%)')) %>%
+    ungroup() %>%
+    group_by(theoretical_pick_number) %>%
+    # Calculate best EPL pick looking N turns ahead from first pick
+    mutate(EPL_positional_selection = position_name[which.max(EPL)][1],
+           EPL_player_selection = player_name[which.max(EPL)][1]) %>%
+    ungroup() %>%
+    dplyr::select(theoretical_pick_number, player_name, position_name, 
+                  projection_adp, total_fantasy_points, EPL_for_player, prob_player_is_best_at_pos, prob_picked, EPL, expected_best_available_player_at_position,
+                  possible_best_available_player_at_position_upper, expected_max_available_value_at_position, EPL_positional_selection, EPL_player_selection)
+  return(ret)
+}
+
+
+analyzed_round_21<- calculate_all_EPL(draft_board = all_draft_players_with_adp_avgs_21)
+analyzed_round_22 <- calculate_all_EPL(draft_board = all_draft_players_with_adp_avgs_22)
+
+# Plot EPL from turn 1
+EPL_Curve <- function(analyzed_round, year, n_turns = 100) {
+  analyzed_round <- analyzed_round %>% filter(!is.na(position_name)) %>%
+    dplyr::select(theoretical_pick_number, position_name, EPL, expected_best_available_player_at_position) %>% distinct()
+  max_y_axis <- 150
+  plot_df <- analyzed_round %>%
+    dplyr::rename(`Position Name` = position_name) %>%
+    ggplot(aes(x = theoretical_pick_number, y = EPL)) +
+    geom_line(aes(color = `Position Name`), size = 1.5) + 
+    theme_classic() +
+    xlab("Overall Pick") +
+    ylab("Expected Loss in Maximum Positional Value") +
+    ggtitle(paste(year, "EPL (Expected Positional Loss) Curve")) + 
+    coord_cartesian(xlim = c(1, n_turns), ylim=c(0, max_y_axis + (max_y_axis / 5))) +
+    # Add round lines
+      geom_vline(xintercept = 12) + geom_vline(xintercept = 24) + geom_vline(xintercept = 36) + geom_vline(xintercept = 48) + geom_vline(xintercept = 60) +
+       geom_vline(xintercept = 72) + geom_vline(xintercept = 84) + geom_vline(xintercept = 96) +
+      geom_label(aes(x = 6, y = max_y_axis + (max_y_axis / 5) - 20, label ="Round 1"), size = 2) + 
+      geom_label(aes(x = 18, y = max_y_axis + (max_y_axis / 5) - 20, label ="Round 2"), size = 2) +
+      geom_label(aes(x = 30, y = max_y_axis + (max_y_axis / 5) - 20, label ="Round 3"), size = 2) +
+      geom_label(aes(x = 42, y = max_y_axis + (max_y_axis / 5) - 20, label ="Round 4"), size = 2) +
+      geom_label(aes(x = 54, y = max_y_axis + (max_y_axis / 5) - 20, label ="Round 5"), size = 2) +
+      geom_label(aes(x = 66, y = max_y_axis + (max_y_axis / 5) - 20, label ="Round 6"), size = 2) +
+      geom_label(aes(x = 78, y = max_y_axis + (max_y_axis / 5) - 20, label ="Round 7"), size = 2)+
+      geom_label(aes(x = 90, y = max_y_axis + (max_y_axis / 5) - 20, label ="Round 8"), size = 2)
+  return(plot_df)
+}
+
+p5 <- EPL_Curve(analyzed_round = analyzed_round_21, year = "2021")
+p6 <- EPL_Curve(analyzed_round = analyzed_round_22, year = "2022")
+
+ggarrange(p5, p6, labels = c("", ""), ncol = 2, nrow = 1,
+  common.legend = TRUE, legend = "bottom")
+```
+
+## AEPL (Average Per Turn Expected Positional Loss From Current Turn To Next Turn)
+
+Now that we have our EPL curves, **we can easily calculate average per turn positional loss between any two turns to standardize our EPL predictions for any duration between two turns**. This allows us to compare the EPL between current turns and upcoming turns, regardless of what the duration of time between those turns are. **As a general note, since there is very little positional loss over the course of one or two picks, we calculate AEPL for all picks with a next turn less than 6 turns away as if their next turn was 6 turns out exactly.**
+ 
+$$\text{AEPL}^{N-M}_{POS} \text{ (Average Expected Per Turn Positional Loss From Current Turn To Next Turn)} \\= \frac{(\text{EPL}^{1, M}_{POS} - \text{EPL}^{1, N}_{POS})}{(M-N)} = \frac{E[\text{Maximum fantasy points available at pick M}]  - E[\text{Maximum fantasy points available at pick N}]}{(M-N)} \\ \text{where N = `Current Turn` and M = `Next Turn`}$$
+
+```{r}
+calculate_turns_until_next_pick <- function(current_turn, num_in_draft, limit = TRUE) {
+  # Define logic to determine current snake direction
+  snake_direction <- case_when((current_turn / num_in_draft) %% 2 == 1 ~ "up",
+                               (current_turn / num_in_draft) %% 2 == 0 ~ "down",
+                               ((floor(current_turn / num_in_draft) %% 2) == 0) & !((current_turn / num_in_draft) %% 2  %in% c(0, 1)) ~ "up", 
+                               (floor(current_turn / num_in_draft) %% 2) == 1  & !((current_turn / num_in_draft) %% 2  %in% c(0, 1)) ~ "down")
+  # Define logic to determine which pick order current drafter is
+  pick_order <- case_when((snake_direction == "up") & ((current_turn %% num_in_draft) != 0) ~ (current_turn %% num_in_draft), 
+                          (snake_direction == "down") & ((current_turn %% num_in_draft) != 0) ~ 1+(num_in_draft - (current_turn %% num_in_draft)),
+                          (snake_direction == "up") & ((current_turn %% num_in_draft) == 0) ~ as.numeric(num_in_draft),
+                          (snake_direction == "down") & ((current_turn %% num_in_draft) == 0) ~ 1)
+  # Define logic to calculate n until next turn
+  n_until_next_turn <- case_when(snake_direction == "up" ~ 2*(num_in_draft - pick_order),
+                                 snake_direction == "down" ~ (2*pick_order)-2)
+  if (n_until_next_turn < 6 & limit == TRUE) {
+    # there will be little to no positional loss below this treshold
+    # so set the minimum turns until next to 6
+    n_until_next_turn = 6 
+  }
+  return(n_until_next_turn)
+}
+
+get_AEPL_from_pick <- function(pick, analyzed_round) {
+  # Caluclate picks ahead
+  picks_ahead <- calculate_turns_until_next_pick(current_turn = pick, num_in_draft = 12)
+  # Calculate EPL from turn 1
+  analyzed_round <- analyzed_round %>% dplyr::select(theoretical_pick_number, position_name, EPL,
+                                                     expected_best_available_player_at_position, possible_best_available_player_at_position_upper) %>% distinct()
+  # Filter to current turn and upcoming turn
+  analyzed_round %>% filter(theoretical_pick_number == pick | theoretical_pick_number == pick + picks_ahead) %>%
+  mutate(theoretical_pick_number = case_when(theoretical_pick_number == pick ~ "current_turn", TRUE ~ "upcoming_turn")) %>%
+  pivot_wider(values_from = c(EPL, expected_best_available_player_at_position,
+                              possible_best_available_player_at_position_upper), names_from = theoretical_pick_number) %>%
+    # Calculate AEPL as the difference between EPLs for each turn divided by duration of turns waited
+  mutate(avg_epl_per_turn = (EPL_upcoming_turn - EPL_current_turn)/picks_ahead, picks_ahead = picks_ahead,  EPL = EPL_upcoming_turn - EPL_current_turn) %>% 
+    dplyr::select(position_name, picks_ahead, possible_best_available_player_at_position_upper_current_turn, 
+                  avg_epl_per_turn, EPL, expected_best_available_player_at_position_upcoming_turn,
+                  possible_best_available_player_at_position_upper_upcoming_turn)
+}
+
+# Calcualte AEPL between curerent turn and next pick for all 96 turns
+get_all_AEPL <- function(analyzed_round) {
+  good_positional_picks <- do.call(rbind, lapply(seq(1, 96), function(turn) {
+    get_AEPL_from_pick(pick = turn, analyzed_round = analyzed_round) %>% mutate(pick = turn)
+  }))
+  return(good_positional_picks)
+}
+
+# Plot AEPL values and find most valueable picks
+plot_AEPL <- function(analyzed_round, year, pick_order_turns_func = NA) {
+  # calculate all AEPL for each turn
+  good_positional_picks <- get_all_AEPL(analyzed_round)
+  # Plot positional value over course of draft
+  if (!is.na(pick_order_turns_func)) {
+    return(lapply(seq(1,12), function(x) {
+      turns = pick_order_turns_func(x)
+      good_positional_picks  %>%
+        filter(pick %in% turns) %>%
+        mutate(pick = unlist(lapply(1:length(turns), rep, times = 4))) %>%
+        dplyr::rename(`AEPL \n(Average Per Turn Expected Positional Loss Before Next Pick)` = avg_epl_per_turn) %>%
+        ggplot() +
+        geom_tile(aes(x = pick, y = position_name, fill = `AEPL \n(Average Per Turn Expected Positional Loss Before Next Pick)`))+ 
+        ggtitle(paste(year, "Pick Order", x, "Positional Value Throughout Draft")) +
+        xlab("Pick Number") + ylab("Position") + theme_classic()}))
+  }
+  turns <- 1:90
+  p1 <- good_positional_picks  %>%
+    filter(pick %in% turns) %>%
+    mutate(pick = unlist(lapply(1:length(turns), rep, times = 4))) %>%
+    dplyr::rename(`AEPL \n(Average Per Turn Expected Positional Loss Before Next Pick)` = avg_epl_per_turn) %>%
+    ggplot() +
+    geom_tile(aes(x = pick, y = position_name, fill = `AEPL \n(Average Per Turn Expected Positional Loss Before Next Pick)`))+ 
+    ggtitle(paste(year, "Positional Value Throughout Draft")) +
+    xlab("Pick Number") + ylab("Position") + theme_classic()
+  #Plot Optimal Pick Locations for Most Valuable Players
+  p2 <- good_positional_picks %>%
+    # Group by Player
+    mutate(possible_pick_abb = sub("^(\\S*\\s+\\S+).*", "\\1", possible_best_available_player_at_position_upper_current_turn)) %>%
+    # Select players with highest value at any point and find their max value
+    group_by(possible_pick_abb) %>% filter(avg_epl_per_turn == max(avg_epl_per_turn)) %>% ungroup() %>% arrange(desc(avg_epl_per_turn)) %>% 
+    dplyr::select(pick, position_name, avg_epl_per_turn, possible_best_available_player_at_position_upper_current_turn,
+                  expected_best_available_player_at_position_upcoming_turn) %>%
+    # Look at top 10
+    dplyr::slice(1:10) %>%
+    dplyr::rename(`Position` = position_name, 
+                  `Possible Value Pick \n(% Avail.)` = possible_best_available_player_at_position_upper_current_turn,
+                  `AEPL` = avg_epl_per_turn, 
+                  `Next Pick Most Likely Positional Best (% Best Next)` = expected_best_available_player_at_position_upcoming_turn)  %>% 
+    gt() %>% 
+    gt_theme_538() %>% 
+    data_color(
+      columns = vars(AEPL),
+      colors = scales::col_numeric(
+        palette = c("white", "#3fc1c9"),
+        domain = NULL
+      ))
+  return(list('plot' = p1, 'best_picks'= p2))
+}
+
+# Calculate AEPL metrics
+aepl_21 <- plot_AEPL(analyzed_round = analyzed_round_21, year = "2021")
+aepl_22 <- plot_AEPL(analyzed_round = analyzed_round_22, year ="2022")
+
+# Plot Results
+ggarrange(aepl_21$plot, labels = c(""), ncol = 1, nrow = 1, common.legend = TRUE, legend = "bottom")
+ggarrange(aepl_22$plot, labels = c(""), ncol = 1, nrow = 1, common.legend = TRUE, legend = "bottom")
+```
+
+**We can also look at which players have the most positional value, and find the turn during which their value is maximized in each draft.** As we will find out in a minute, it is not always best to draft the most immediate positional value off the board (i.e. since we have to draft different numbers of each position), but its useful to know where the most positional value is to understand the slate of the draft board. More on this later.
+
+```{r}
+aepl_21$best_picks %>% tab_header(
+    title = md("**2021** Optimal Pick Locations for Most Valuable Players"),
+    subtitle = md("Using **AEPL (Average Expected Positional Loss Per Turn Before Next Pick)**")
+  )
+aepl_22$best_picks %>% tab_header(
+    title = md("**2022** Optimal Pick Locations for Most Valuable Players"),
+    subtitle = md("Using **AEPL (Average Expected Positional Loss Per Turn Before Next Pick)**")
+  )
+```
+
+
+While it's nice to generalize to positional loss to the expected most valuable players for each turn, we can also make analyze these results more specific to any individual player. Of course, there is variability to how each future draft goes, and team demands may not always align with the most valuable overall pick, making it useful to know the AEPL for the top likely available few players of each position. We can analyze what we can expect the average per turn positional loss (AEPL) to be for the top 3 positional players that are most likely to be the most valuable player for that pick.
+
+
+$$\text{AEPL}^{N-M}_{POS} \text{| Player X is currently most valuable } \\ = \frac{[\text{Player X Season Fantasy Points}]  - E[\text{Maximum fantasy points available at pick N}]}{(M-N)} \\ \text{where N = `Current Turn` and M = `Next Turn`} $$
+
+Of course, this assumes there is no covariance associated between the current pick maximum positional value and the upcoming maximum positional value, which may be untrue especially for long duration between picks. With this said, for all practical uses, like this one, we can skip the complicated covariance bit for now and feel OK about our conditional AEPL estimate.
+
+
+Below, **we calculate the best AEPL for the top 3 most valuable positional players that have a 20% or higher chance of being available for each turn in the 2022 draft**.
+
+```{r}
+# Calculate conditional AEPL (given best player on turn is player X)
+get_all_AEPL_from_pick <- function(pick, analyzed_round) {
+  # Calulcate turns until next pick
+  picks_ahead <- calculate_turns_until_next_pick(current_turn = pick, num_in_draft = 12)
+  ret <- analyzed_round %>% 
+    dplyr::select(theoretical_pick_number, prob_picked, position_name, player_name, total_fantasy_points, expected_max_available_value_at_position) %>% 
+    # Filter to current turn and upcoming turn
+    filter(theoretical_pick_number == pick | theoretical_pick_number == pick + picks_ahead) %>%
+    mutate(theoretical_pick_number = case_when(theoretical_pick_number == pick ~ "current_turn", TRUE ~ "upcoming_turn")) %>%
+    pivot_wider(values_from = c(expected_max_available_value_at_position, prob_picked), names_from = theoretical_pick_number) %>%
+    # Calculate AEPL as difference between projected fantasy points of currently available player minus expected at next turn
+    mutate(AEPL_for_player =  (total_fantasy_points - expected_max_available_value_at_position_upcoming_turn)/picks_ahead) %>% 
+      dplyr::select(prob_picked_current_turn, position_name, player_name, AEPL_for_player) %>%
+      filter(prob_picked_current_turn < 0.8)
+  return(ret)
+}
+
+# Calculate all conditional AEPLs for all picks and all possible best players
+all_aepl_picks_22 <- do.call(rbind, lapply(c(1, seq(10, 100, by = 10)), function(turn) {
+    get_all_AEPL_from_pick(pick = turn, analyzed_round = analyzed_round_22) %>% mutate(pick = turn)
+}))
+
+picks_unformatted <- all_aepl_picks_22 %>%
+  # Filter to only players than have a 20% chance or more of being available on current turn
+  filter(prob_picked_current_turn < 0.8) %>%
+  # Filter to top 3 at position for each turn
+  group_by(pick, position_name) %>% mutate(rank = rank(-AEPL_for_player, ties.method = 'first')) %>% filter(rank <= 3) %>% ungroup() %>%
+  mutate(player_name = paste0(player_name, " (", round(100-prob_picked_current_turn*100, 2), "% Avail.)"), AEPL_for_player = round(AEPL_for_player, 2)) %>%
+  dplyr::select(pick, position_name, player_name, AEPL_for_player)
+
+# Format table
+picks_formatted <- do.call(cbind, lapply(c("QB", "RB", "WR", "TE"), function(x) {picks_unformatted %>% filter(position_name == x) %>%
+    dplyr::select(pick, player_name, AEPL_for_player) %>%
+    `colnames<-`(c(paste0('pick_', x), paste0('position_name_', x),  paste0('AEPL_for_player_', x)))})) %>%
+  dplyr::select(-c(pick_RB, pick_WR, pick_TE)) %>% dplyr::rename(pick = pick_QB)
+
+picks_further_formatted <- do.call(rbind, lapply(c(1, seq(10, 50, by = 10)), 
+                                                 function(x){df <- picks_formatted %>% filter(pick == x)
+                                                 df[nrow(df)+1,] <- NA
+                                                 return(df)}))
+
+# Output top best conditional AEPLs for each turn
+picks_further_formatted %>%
+  dplyr::rename(Pick = pick, `Name QB` = position_name_QB, `QB AEPL` = AEPL_for_player_QB,
+                `Name RB` = position_name_RB, `RB AEPL` = AEPL_for_player_RB,
+                `Name TE` = position_name_TE, `TE AEPL` = AEPL_for_player_TE, `Name WR` = position_name_WR, `WR AEPL` = AEPL_for_player_WR) %>%
+  gt() %>%
+  sub_missing(
+  columns = everything(),
+  rows = everything(),
+  missing_text = "--") %>%
+    data_color(
+      columns = c(`QB AEPL`, `WR AEPL`, `TE AEPL`, `RB AEPL`),
+      colors = scales::col_numeric(
+        palette = c("white", "#3fc1c9"),
+        domain = NULL,
+      na.color = "transparent"
+      )) %>% tab_header(
+    title = md("Expected Conditional AEPL Throughout the **2022** Best Ball Draft"),
+    subtitle = md("Players must have at least 20% availability chance; Using **AEPL (Average Expected Positional Loss Per Turn Before Next Pick)**"))
+```
+
+# Good AEPL Picks, Bad AEPL Picks, and What They Mean for Best Ball Success
+
+So this raises the question: **How much did selecting the correct POSITION at the correct time help teams regardless of picking the CORRECT player? Well its the basis a pretty solid success metric for previous drafts**
+
+$$\text{Pick Value} = \begin{cases}
+\text{Good Pick} & \text{if } \text{Per Turn EPL}_{POS}^{\text{CURRENT-NEXT}} > 2,\\
+\text{Bad Pick}  & \text{if } \text{Otherwise}
+\end{cases}$$
+
+In other words, we say a pick is good if there is a expected decline in positional value of 2 fantasy point per turn until the drafters next turn. How does this correlate with playoff advance rate?
+
+```{r}
+# Calculate joined AEPL for all of 2021 and 2022
+avg_aepl_joinable <- rbind(get_all_AEPL(analyzed_round = analyzed_round_21) %>% mutate(year = 2021), 
+                                           get_all_AEPL(analyzed_round = analyzed_round_22)  %>% 
+                                          mutate(year = 2022)) %>% dplyr::rename(overall_pick_number = pick)
+
+# Calulculate and plot relationship between number of "Good Picks" and playoff advnace rate
+plot_df <- rbind(dat_21 %>% dplyr::select(playoff_team, tournament_entry_id, overall_pick_number, position_name) %>% mutate(year = 2021), 
+      dat_22 %>% dplyr::select(playoff_team, tournament_entry_id, overall_pick_number, position_name) %>% mutate(year = 2022)) %>%
+  left_join(avg_aepl_joinable, by = c("overall_pick_number", "position_name", "year")) %>%
+  mutate(good_pick_flag = ifelse(avg_epl_per_turn < 2 | is.na(EPL), 0, 1)) %>%
+  group_by(tournament_entry_id) %>%
+  summarise(good_positional_picks = sum(good_pick_flag), playoff_team = max(playoff_team), year = max(year)) %>%
+  ungroup() %>%
+  group_by(year, good_positional_picks) %>%
+  summarise(percent_playoffs_made = mean(playoff_team), n = n()) %>%
+  filter(n > 30) %>%
+  ungroup() 
+
+plot_df %>%
+  mutate(year = as.factor(year)) %>%
+  dplyr::rename(Year = year) %>%
+  ggplot() +
+  geom_line(aes(x = good_positional_picks, y = percent_playoffs_made, group = Year, color = Year), size = 2) +
+  xlab("Number of Good Positional Picks") + ylab("Percent of Teams that Made the Playoffs") + ggtitle("Playoff Percentages by Number of Good Positional Picks") +
+  theme_classic()
+```
+
+
+# Somehow, The Most Optional Strategy is Even More Complicated: Maximizing Roster EPL and Why you Might Not Want to Greedily Maximize Value-Based Metrics Like EPV Each Turn
+
+While knowing where high EPL picks are is important, we need to keep in mind that **maximizing EPV each turn is not the way to maximize team value, and instead maximizing total EPV for the entire draft (or at least the first 8 picks) is.** The fact that we select different numbers of each position means these two things are not the same.
+
+For this reason, even assuming you know exactly how many points a player has or is going to score, the optimal drafting strategy is not purely immediate value over replacement. **Much like we use value over replacement, or in our case AEPL, to "normalize" the differences in points scored by different positions, we should also be "normalizing" for the fact that we need to select different numbers of each position. Otherwise, our selections are taken using a very greedy approach**.
+
+What do I mean by this? **From the above we found out that tight ends experience the most positional loss during for the first pick in the 2022 draft** (i.e. tight ends degrade in season long positional fantasy value by an expected 65 points by the next turn at the 24th pick). Wide Reciever expected positional loss is significantly less (i.e. wide receivers degrade in season long positional fantasy value by an expected 28 points by the next turn at the 24th pick). See below.
+
+**Even despite this, you would have been strategically wrong to pick Travis Kelce with your first pick, as Justin Jefferson was the best choice**. If you don't believe me, **I simulated what the "optimal draftable starting lineup" (i.e. each player had to have a 80% chance of being available to be selected) would have been in 2022 for a drafter with the first pick to maximize total EPV for the first 8 picks** (by the way, no one in 2022 best ball drafted this lineup). EPL is the optimal option to maximize here, as plain fantasy points causes criminally underrated players to be selected too early, missing value on other players. For this reason, this isnt necessarily the most ideal starting lineup, but is the most ideal first 8 picks for someone with the first pick in 2022.
+
+
+```{r}
+calculate_all_pick_numbers <- function(pick_order){
+  i <- 2
+  current <- pick_order
+  all_turns <- c(pick_order)
+  while (length(all_turns) < 8) {
+    next_turn_in <- calculate_turns_until_next_pick(current_turn=current, num_in_draft=12, limit = FALSE)
+    all_turns[i] <- current+1+next_turn_in
+    current <- current+1+next_turn_in
+    i <- i+1
+  }
+  return(all_turns)
+}
+
+all_aepl_picks_22 <- do.call(rbind, lapply(seq(1, 100, by = 1), function(turn) {
+    get_all_AEPL_from_pick(pick = turn, analyzed_round = analyzed_round_22) %>% mutate(pick = turn)
+}))
+
+
+get_valuable_achievable_roster <- function(aepl_options, drafter_pick_order, picked_prob_cutoff = 0.2) {
+  best_for_each_turn_pick_order <- aepl_options %>% 
+    left_join(data.frame(pick_order = unlist(lapply(seq(1,12), rep, times = 8)), 
+             pick_number = rep(seq(1,8),times= 12), pick = unlist(lapply(seq(1, 12), calculate_all_pick_numbers))), by = "pick") %>%
+    filter(pick_order == drafter_pick_order, prob_picked_current_turn < picked_prob_cutoff) %>% 
+    mutate(needed = case_when(position_name == "QB" ~ 1, position_name == "TE" ~ 1, position_name == "RB" ~ 2, position_name == "WR" ~ 1)) %>%
+    group_by(pick, position_name) %>% filter(rank(desc(AEPL_for_player)) <= needed) 
+  
+  # Check every possible combination of top EPL players to maximize Roster EPL
+  all_combos <- expand.grid(lapply(unique(best_for_each_turn_pick_order$pick), function(x) {
+    best_for_each_turn_pick_order[best_for_each_turn_pick_order$pick == x,]$player_name})) 
+  
+  best_valid_combo <- all_combos %>%
+    `colnames<-`(unique(best_for_each_turn_pick_order$pick)) %>%
+    mutate(combination_num = row_number()) %>% pivot_longer(cols = paste0(unique(best_for_each_turn_pick_order$pick))) %>%
+    `colnames<-`(c("combo_num", "pick", "player_name")) %>% mutate(pick = as.numeric(pick)) %>%
+    left_join(best_for_each_turn_pick_order, by = c("pick", "player_name")) %>%
+    group_by(combo_num) %>% 
+    filter(length(unique(player_name)) == 8) %>% 
+    filter(sum(position_name == "QB") == 1, sum(position_name == "TE") == 1, (sum(position_name == "WR") == 3 | sum(position_name == "WR") == 4)) %>% 
+    filter(sum(AEPL_for_player) == max(sum(AEPL_for_player))) %>%
+    group_by(combo_num, position_name) %>%
+    ungroup() %>% filter(combo_num == min(combo_num))
+  
+  return(best_valid_combo)
+}
+
+# This gets the highest EPL value achievable roster
+get_valuable_achievable_roster(aepl_options=all_aepl_picks_22, drafter_pick_order=1, picked_prob_cutoff = 0.5) %>%
+  mutate(prob_available = paste0(100-100*round(prob_picked_current_turn, 2), "%")) %>%
+  dplyr::select(pick, player_name, prob_available, position_name, AEPL_for_player) %>%
+  dplyr::rename(`Player Name` = player_name, `Probability Available On Pick` = prob_available, `Position Name` = position_name, `AEPL` = AEPL_for_player) %>%
+  gt() %>% gt_theme_538() %>% tab_header(
+    title = md("Pick Order 1 Drafter 2022: Highest EPL Value Achievable Roster "),
+    subtitle = md("Players must have at least 50% availability chance; Using EPL Roster Maximization**"))  %>% 
+    data_color(
+      columns = vars(AEPL),
+      colors = scales::col_numeric(
+        palette = c("white", "#3fc1c9"),
+        domain = NULL
+      ))
+```
+
+We should notice a few things.
+
+1. **These picks do not align with highest positional value for each turn**. As I said before, this is due to the positional imbalances we need to pick to make a starting roster. **Why would our first pick not be Travis Kelce if the expected positional loss during the first pick is highest for tight ends? - because to form a starting lineup you only need 1 TE but you need 3 WRs**. Despite positional loss being lower for WRs on the first pick, to not pick a WR would mean giving up WR value on a turn where WR value is decent. Since you need to pick 3 WR in the first 8 picks, its necessary to take WR value when available EVEN if there is higher positional loss for a position for which you need one of, like tight ends.
+2. **We must select players with negative expected positional loss, even when maximizing our roster EPL - this is because by taking positional value earlier than expected, we tamper with the assumed ADP to true pick distributions. This is not a bad thing, just a sign that we are taking positional value earlier than AEPL expected other players would.** For instance, since we take Josh Jacobs at 49 (since he is the most valuable RB and we have to pick at least 2 RBs before the 8th round to fill our lineup), and his adp is 70, we get a negative EDP for Tony Pollard in the next pick since out expected positional best player is still Jash Jacobs. This does not mean that Tony Pollard is a bad pick, just that we selected positional value earlier than usual -  I digress.
+
+By the way, this is not to say that it's a "bad strategy" to draft by selecting the best EPL or other value-based methods each turn, but it's just not the optimal case. **To optimally draft we can run simulations like the above to maximize total EPL, which we will now do for 2021 and 2022 to gain insights on what positions would have been best to aim for. I call this "Roster EPL Maximization"**  
+
+```{r}
+all_aepl_picks_21 <- do.call(rbind, lapply(seq(1, 100, by = 1), function(turn) {
+    get_all_AEPL_from_pick(pick = turn, analyzed_round = analyzed_round_21) %>% mutate(pick = turn)
+}))
+
+plot_positional_value <- function(aepl_options, year, picked_prob_cutoff = 0.5) {
+  plot_df <- do.call(rbind, lapply(seq(1,12), function(x){get_valuable_achievable_roster(aepl_options=aepl_options, drafter_pick_order=x, 
+                                                                                         picked_prob_cutoff = picked_prob_cutoff) %>%
+      dplyr::select(player_name, prob_picked_current_turn, position_name, AEPL_for_player, pick_order, pick_number)}))
+  
+  plot1 <- plot_df %>%
+    dplyr::rename(EPL = AEPL_for_player, `Position Name` = position_name) %>%
+    ggplot() +
+    geom_tile(aes(x = pick_number, y = as.factor(pick_order), fill = `Position Name`, alpha = EPL)) +
+    ggtitle(label = paste(year, "Best Ball Draft Positional Value by Roster EPL Maximization"), 
+            subtitle = "EPL: Per Turn Expected Positional Loss, Minimum 50% Chance of Pick Availability") +
+    theme_classic() + xlab("Pick Number") + ylab("Drafter Pick Order")
+  return(list('df' = plot_df, 'plot_1' = plot1))
+}
+
+p21 <- plot_positional_value(aepl_options=all_aepl_picks_21, year = '2021', picked_prob_cutoff = 0.5)
+p22 <- plot_positional_value(aepl_options=all_aepl_picks_22, year = '2022', picked_prob_cutoff = 0.5)
+
+p21$plot_1
+p22$plot_1
+```
+
+Clearly, early positional value was ar the RB position in 2021, and the WR position in 2022. What about 2023?
+
+## 2023 Predicted AEPL and How We Can Use Expected Positional Loss To Make Draft Decisions...
+
+We can use this to **use the predictions made by FantasyPros to create predicted EPL Curves and AEPL Plots for 2023**.
+
+```{r}
+# Pull FantasyPros Projections and ADP Consensus data from CSV
+adp <- read.csv("/Users/nickbachelder/Desktop/Personal Code/best-ball-data-bowl/data/FantasyPros_2023_Overall_ADP_Rankings.csv") %>%
+  dplyr::select(Player, AVG, POS) %>% dplyr::rename(player_name = Player, projection_adp = AVG, position_name = POS) %>%
+  mutate(position_name = substring(position_name, 1, 2))
+projections <- do.call(rbind, lapply(here::here(paste0("data/FantasyPros_Fantasy_Football_Projections_", c("WR.csv", "TE.csv", "QB.csv", "RB.csv"))), 
+                      function(x) {read.csv(x) %>% dplyr::select(Player, FPTS) %>% dplyr::rename(player_name = Player, total_fantasy_points = FPTS) %>%
+                          filter(!is.na(player_name), !is.na(total_fantasy_points))}))
+# Create expected draft board for 2023
+draft_board_23 <- projections %>% left_join(adp, by = 'player_name') %>% filter(complete.cases(.), projection_adp < 216)
+
+# Cauluate EPL from first turn for all turns
+analyzed_23 <- calculate_all_EPL(draft_board_23)
+# Calculate and and plot EPL and AEPL turn to turn for 2023
+aepl_plots <- plot_AEPL(analyzed_round = analyzed_23, year = "2023")
+EPL_Curve(analyzed_23, year = "2023")
+ggarrange(aepl_plots$plot, labels = c(""), ncol = 1, nrow = 1, common.legend = TRUE, legend = "bottom") 
+aepl_plots$best_picks %>% tab_header(
+    title = md("**2023** Optimal Pick Locations for Most Valuable Players"),
+    subtitle = md("Using **AEPL (Average Expected Positional Loss Per Turn Before Next Pick)**"))
+```
+
+
+Let's use "Roster EPL Maximization" to **figure out the optimal positional pick order based on which draft order a particular drafter is placed in**. It looks like a great year for "Zero RB."
+
+
+```{r}
+all_aepl_picks_23 <- do.call(rbind, lapply(seq(1, 100, by = 1), function(turn) {
+    get_all_AEPL_from_pick(pick = turn, analyzed_round = analyzed_23) %>% mutate(pick = turn)
+}))
+p23 <- plot_positional_value(aepl_options=all_aepl_picks_23, year = '2023', picked_prob_cutoff = 0.5)
+
+p23$plot_1
+```
+
+Which players do these positional selections equate to aiming for? 
+
+```{r}
+p23$df  %>%
+  filter(pick_order <= 6) %>% 
+  mutate(label = paste0(player_name, " (", 100-round(prob_picked_current_turn*100, 2), "% Avail.)"), pick_order = paste0("Pick Order ",pick_order)) %>%
+  dplyr::select(pick_number, pick_order, label)%>%
+  dplyr::rename(`Pick Number` = pick_number) %>%
+  pivot_wider(names_from = pick_order, values_from = c(label)) %>% gt()  %>%
+    gt_theme_538()%>% tab_header(
+    title = md("Target Players For 2023 Best Ball Draft by Pick Order and Number"),
+    subtitle = md("**Using EPL Roster Maximizationl; Pick Order 1-6**"))
+```
+
+```{r}
+p23$df  %>%
+  filter(pick_order > 6) %>% 
+  mutate(label = paste0(player_name, " (", 100-round(prob_picked_current_turn*100, 2), "% Avail.)"), pick_order = paste0("Pick Order ",pick_order)) %>%
+  dplyr::select(pick_number, pick_order, label)%>%
+  dplyr::rename(`Pick Number` = pick_number) %>%
+  pivot_wider(names_from = pick_order, values_from = c(label)) %>% gt()  %>%
+    gt_theme_538()%>% tab_header(
+    title = md("Target Players For 2023 Best Ball Draft by Pick Order and Number"),
+    subtitle = md("**Using EPL Roster Maximizationl Pick Order 6-12**"))
+```
+
+# Conclusion
+
+Well, that's all. While there is a TON of variability in player fantasy predictions, **we have used best ball data to shape how to think about positional value over time**. **After seeing positional value in 2023 using EPL Roster Maximization, I'll be undoubtedly running some sort of Zero RB for this year!**
+
+Thanks to Underdog for the great data set, and thanks for reading!
+
+
