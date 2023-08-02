@@ -1,0 +1,992 @@
+---
+title: "2023 Best Ball Data Bowl: The Su-PPPOR Bowl"
+author: "Zach Bradlow (X: @zachbradlow)"
+date: "2023-08-01"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Introduction
+
+For my 2023 Best Ball Data Bowl, I focused on one question: when I am on
+the clock in a Best Ball draft: who should I select with my next overall
+selection? While this may seem like a straightforward problem, it
+necessitates considering a myriad of factors, such as existing roster
+construction through draft capital spent, positional value, stacking
+ability, draft pick number, draft order, and ADP value. To further
+illustrate this point, here is a meme below to articulate the complexity
+of the problem
+
+```{r meme, echo=FALSE, fig.align="center"}
+knitr::include_graphics("meme.png")
+```
+
+To gain valuable insights into optimizing individual player selection, I
+developed a metric known as predicted pick points over replacement
+(PPPOR). This metric predicts the amount of points that a player will
+contribute to a Best Ball roster over the regular season over a player
+that is drafted two rounds (24 picks) later. By maximizing PPPOR, Best
+Ball drafters will able to dynamically optimize their team to increase
+their regular season advance rate and overall projected roster points.
+
+# Assumptions
+
+In conducting this analysis, I needed to make a series of assumptions in
+order to create a player-agnostic dynamic strategy optimization method:
+
+**- The ADP Market is Efficient:** I assume that the Average Draft
+Position (ADP) accurately reflects the collective knowledge and
+expectations of the participants, and thus represents what I am
+competing against in the drafts.
+
+**- Rookies and Team Changes are Priced In:** I take into account that
+the market has already factored in the potential impact of rookies and
+team changes on player performances and draft positions.
+
+**- Regular Season Optimization is Easier than Playoff Optimization:** I
+consider that focusing on optimizing my team for the regular season
+enables a larger sample size, which could potentially increase my
+competitive edge gained. However, I acknowledge that the payout
+structure of Best Ball is skewed towards playoff optimization in order
+to maximize EV - although, I am assuming that winning in the playoffs is
+random (and that constructing a player-neutral portfolio maximizing
+EPPOR will not negatively affect the chances of winning relative to a
+baseline win probability)
+
+# Data Cleaning:
+
+My project specifically focuses on Best Ball Mania III data from
+Underdog and NFL roster data from the nflverse in the 2022 NFL season.
+This data cleaning process of removing erroneous teams, adding rostered
+players, and removing duplicate named players (ex: Michael Carter v.
+Michael Carter) ensures that the dataset is ready for further analysis
+
+```{r data-cleaning, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+# Set the working directory to the appropriate path
+setwd("/Users/zbradlow/Desktop")
+
+# Load necessary libraries
+library(tidyverse)
+library(nflfastR)
+library(zoo)
+library(kableExtra)
+library(xgboost)
+library(caret)
+library(ggplot2)
+library(dplyr)
+
+# Read in the CSV files
+BBM_22_RS_F_1 <- read_csv('2022-RS-F-1.csv')
+BBM_22_RS_F_2 <- read_csv('2022-RS-F-2.csv')
+BBM_22_RS_F_3 <- read_csv('2022-RS-F-3.csv')
+BBM_22_RS_F_4 <- read_csv('2022-RS-F-4.csv')
+BBM_22_RS_F_5 <- read_csv('2022-RS-F-5.csv')
+BBM_22_RS_F_6 <- read_csv('2022-RS-F-6.csv')
+BBM_22_RS_F_7 <- read_csv('2022-RS-F-7.csv')
+BBM_22_RS_F_8 <- read_csv('2022-RS-F-8.csv')
+BBM_22_RS_F_9 <- read_csv('2022-RS-F-9.csv')
+BBM_22_RS_F_10 <- read_csv('2022-RS-F-10.csv')
+BBM_22_RS_F_11 <- read_csv('2022-RS-F-11.csv')
+BBM_22_RS_F_12 <- read_csv('2022-RS-F-12.csv')
+BBM_22_RS_F_13 <- read_csv('2022-RS-F-13.csv')
+BBM_22_RS_F_14 <- read_csv('2022-RS-F-14.csv')
+BBM_22_RS_F_15 <- read_csv('2022-RS-F-15.csv')
+BBM_22_RS_F_16 <- read_csv('2022-RS-F-16.csv')
+BBM_22_RS_F_17 <- read_csv('2022-RS-F-17.csv')
+BBM_22_RS_F_18 <- read_csv('2022-RS-F-18.csv')
+BBM_22_RS_F_19 <- read_csv('2022-RS-F-19.csv')
+BBM_22_RS_F_20 <- read_csv('2022-RS-F-20.csv')
+BBM_22_RS_F_21 <- read_csv('2022-RS-F-21.csv')
+BBM_22_RS_F_22 <- read_csv('2022-RS-F-22.csv')
+BBM_22_RS_F_23 <- read_csv('2022-RS-F-23.csv')
+BBM_22_RS_F_24 <- read_csv('2022-RS-F-24.csv')
+BBM_22_RS_F_25 <- read_csv('2022-RS-F-25.csv')
+BBM_22_RS_F_26 <- read_csv('2022-RS-F-26.csv')
+
+# Combine the data from multiple CSV files using rbind
+BBM_22_RS_F <- rbind(BBM_22_RS_F_1,BBM_22_RS_F_2,BBM_22_RS_F_3,BBM_22_RS_F_4,
+                     BBM_22_RS_F_5,BBM_22_RS_F_6,BBM_22_RS_F_7,BBM_22_RS_F_8,
+                     BBM_22_RS_F_9,BBM_22_RS_F_10,BBM_22_RS_F_11,BBM_22_RS_F_12,
+                     BBM_22_RS_F_13,BBM_22_RS_F_14,BBM_22_RS_F_15,BBM_22_RS_F_16,
+                     BBM_22_RS_F_17,BBM_22_RS_F_18,BBM_22_RS_F_19,BBM_22_RS_F_20,
+                     BBM_22_RS_F_21,BBM_22_RS_F_22,BBM_22_RS_F_23,BBM_22_RS_F_24,
+                     BBM_22_RS_F_25,BBM_22_RS_F_26)
+
+# Remove unnecessary objects to free up memory
+rm(BBM_22_RS_F_1,BBM_22_RS_F_2,BBM_22_RS_F_3,BBM_22_RS_F_4,BBM_22_RS_F_5,
+   BBM_22_RS_F_6,BBM_22_RS_F_7,BBM_22_RS_F_8,BBM_22_RS_F_9,BBM_22_RS_F_10,
+   BBM_22_RS_F_11,BBM_22_RS_F_12,BBM_22_RS_F_13,BBM_22_RS_F_14,BBM_22_RS_F_15,
+   BBM_22_RS_F_16,BBM_22_RS_F_17,BBM_22_RS_F_18,BBM_22_RS_F_19,BBM_22_RS_F_20,
+   BBM_22_RS_F_21,BBM_22_RS_F_22,BBM_22_RS_F_23,BBM_22_RS_F_24,BBM_22_RS_F_25,
+   BBM_22_RS_F_26)
+
+# List of tournament_entry_id to be removed
+ids_to_remove <- c(
+  "0cd770dc-2ffa-490a-a93d-2e0e64c3f9a3",
+  "1b97a0e5-3a29-4a28-b276-69541afe116f",
+  "6408bcff-e8a1-4d9b-a001-2a75106c613a",
+  "a26bdf98-1180-499a-8a5f-83bc51411fd6",
+  "0e92232b-a16b-42fd-a18a-e9d956b68654",
+  "da8a102a-ad58-42e8-b46e-03382ed0923b",
+  "3dbd518d-b70d-469a-b722-ca9d7d76c351",
+  "8cfb3839-967e-4e1b-8c25-00ebaab08083",
+  "98003984-b88b-4263-b32d-e8855c8bdb26",
+  "b65930ef-39d3-463b-84e1-fa5b6d05e40c",
+  "c83d4bbf-ce02-49a8-924e-17d838e28a66",
+  "4c02242d-aea3-4edf-a663-a9df20f27191",
+  "73553232-70c9-4fe1-8d1f-0e5dedddc074",
+  "248c6815-3c1e-4962-92b4-a5448a50b696",
+  "5ff618a6-2e3b-44e7-9643-b58a76d644c3",
+  "d19e170a-c7e7-4a40-8f0a-671c31792827",
+  "5516dfcc-4f9f-423a-900e-278cdc8eb4b0",
+  "e668d953-d5ae-44a4-9935-59a4eec0ab2c"
+)
+
+# Filter out rows with tournament_entry_id matching the IDs to remove
+BBM_22_RS_F <- BBM_22_RS_F[!(BBM_22_RS_F$tournament_entry_id %in% ids_to_remove),]
+
+# Fetch NFL roster data for the year 2022
+nfl_rosters = fast_scraper_roster(2022) %>%
+  # Remove some specific ESPN IDs from the data
+  filter(!espn_id %in% c(4038437, 3915239, 4034849, 4240657, 15231, 16140, 4034952, 4034964, 4054085)) %>%
+  # Select relevant columns and rename 'full_name' to 'player_name'
+  select(team, full_name, headshot_url) %>%
+  rename("player_name" = "full_name") %>%
+  # Perform some name corrections using gsub
+  mutate(player_name = gsub("D.J. Moore", "DJ Moore", player_name)) %>%
+  mutate(player_name = gsub("A.J. Dillon", "AJ Dillon", player_name)) %>%
+  # Manually add some missing player names and headshot URLs
+  rbind(data.frame(team = "SF", player_name = "Jeff Wilson", headshot_url = NA)) %>%
+  rbind(data.frame(team = "LAR", player_name = "Darrell Henderson", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Odell Beckham", headshot_url = NA)) %>%
+  rbind(data.frame(team = "ATL", player_name = "Mike Davis", headshot_url = NA)) %>%
+  rbind(data.frame(team = "BUF", player_name = "Mitch Trubisky", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Rob Gronkowski", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Cam Newton", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Josh Gordon", headshot_url = NA)) %>%
+  rbind(data.frame(team = "LAC", player_name = "Joshua Palmer", headshot_url = NA)) %>%
+  rbind(data.frame(team = "CAR", player_name = "Robbie Anderson", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Emmanuel Sanders", headshot_url = NA)) %>%
+  rbind(data.frame(team = "MIA", player_name = "Sony Michel", headshot_url = NA)) %>%
+  rbind(data.frame(team = "DET", player_name = "DJ Chark", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Tim Tebow", headshot_url = NA)) %>%
+  rbind(data.frame(team = "ARI", player_name = "Ricky Seals-Jones", headshot_url = NA)) %>%
+  rbind(data.frame(team = "LAC", player_name = "Jared Cook", headshot_url = NA)) %>%
+  rbind(data.frame(team = "DEN", player_name = "KJ Hamler", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Antonio Brown", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Chris Carson", headshot_url = NA)) %>%
+  rbind(data.frame(team = "SEA", player_name = "J.J. Arcega-Whiteside", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Jimmy Graham", headshot_url = NA)) %>%
+  rbind(data.frame(team = "SEA", player_name = "Hunter Bryant", headshot_url = NA)) %>%
+  rbind(data.frame(team = "HOU", player_name = "William Fuller", headshot_url = NA)) %>%
+  rbind(data.frame(team = "SF", player_name = "JaMycal Hasty", headshot_url = NA)) %>%
+  rbind(data.frame(team = "SF", player_name = "Jalen Hurd", headshot_url = NA)) %>%
+  rbind(data.frame(team = "LVR", player_name = "Bryan Edwards", headshot_url = NA)) %>%
+  rbind(data.frame(team = "LAR", player_name = "Rico Gafford", headshot_url = NA)) %>%
+  rbind(data.frame(team = "DAL", player_name = "Abram Smith", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Drew Brees", headshot_url = NA)) %>%
+  rbind(data.frame(team = "LVR", player_name = "Austin Watkins", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Devonta Freeman", headshot_url = NA)) %>%
+  rbind(data.frame(team = "HOU", player_name = "Branden Mack", headshot_url = NA)) %>%
+  rbind(data.frame(team = "ARI", player_name = "Jaylen Smith", headshot_url = NA)) %>%
+  rbind(data.frame(team = "JAC", player_name = "Shelton Gibson", headshot_url = NA)) %>%
+  rbind(data.frame(team = "KC", player_name = "Pooka Williams", headshot_url = NA)) %>%
+  rbind(data.frame(team = "JAC", player_name = "Carlos Hyde", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NYJ", player_name = "Jody Fortson", headshot_url = NA)) %>%
+  rbind(data.frame(team = "MIA", player_name = "Phillip Lindsay", headshot_url = NA)) %>%
+  rbind(data.frame(team = "BUF", player_name = "Antonio Williams", headshot_url = NA)) %>%
+  rbind(data.frame(team = "LVR", player_name = "Jalen Richard", headshot_url = NA)) %>%
+  rbind(data.frame(team = "CHI", player_name = "Alize Mack", headshot_url = NA)) %>%
+  rbind(data.frame(team = "MIA", player_name = "Damien Williams", headshot_url = NA)) %>%
+  rbind(data.frame(team = "CHI", player_name = "Ryan Nall", headshot_url = NA)) %>%
+  rbind(data.frame(team = "ATL", player_name = "ZaQuandre White", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NE", player_name = "Tay-Shawne Jennings", headshot_url = NA)) %>%
+  rbind(data.frame(team = "TB", player_name = "Scotty Miller", headshot_url = NA)) %>%
+  rbind(data.frame(team = "CHI", player_name = "Tarik Cohen", headshot_url = NA)) %>%
+  rbind(data.frame(team = "PIT", player_name = "Xavier Grimble", headshot_url = NA)) %>%
+  rbind(data.frame(team = "ATL", player_name = "Todd Gurley", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NO", player_name = "Thaddeus Moss", headshot_url = NA)) %>%
+  rbind(data.frame(team = "CHI", player_name = "Mohamed Sanu", headshot_url = NA)) %>%
+  rbind(data.frame(team = "CIN", player_name = "Master Teague", headshot_url = NA)) %>%
+  rbind(data.frame(team = "SEA", player_name = "Elijhaa Penny", headshot_url = NA)) %>%
+  rbind(data.frame(team = "DAL", player_name = "Jalen Morton", headshot_url = NA)) %>%
+  rbind(data.frame(team = "PHI", player_name = "Jordan Howard", headshot_url = NA)) %>%
+  rbind(data.frame(team = "DEN", player_name = "Michael Warren", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NO", player_name = "Lil'Jordan Humphrey", headshot_url = NA)) %>%
+  rbind(data.frame(team = "TB", player_name = "Terry Godwin", headshot_url = NA)) %>%
+  rbind(data.frame(team = "PIT", player_name = "Jaylen Samuels", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NYJ", player_name = "Bug Howard", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NE", player_name = "Kahale Warring", headshot_url = NA)) %>%
+  rbind(data.frame(team = "IND", player_name = "Whop Philyor", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Julian Edelman", headshot_url = NA)) %>%
+  rbind(data.frame(team = "LVR", player_name = "Charleston Rambo", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NE", player_name = "Danny Amendola", headshot_url = NA)) %>%
+  rbind(data.frame(team = "SEA", player_name = "Dee Eskridge", headshot_url = NA)) %>%
+  rbind(data.frame(team = "TB", player_name = "Cyril Grayson", headshot_url = NA)) %>%
+  rbind(data.frame(team = "CHI", player_name = "Bisi Johnson", headshot_url = NA))  %>%
+  rbind(data.frame(team = "MIA", player_name = "DJ Turner", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Derrius Guice", headshot_url = NA)) %>%
+  rbind(data.frame(team = "SEA", player_name = "Alex Collins", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Tony Romo", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NO", player_name = "Mataeo Durant", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NO", player_name = "Travis Benjamin", headshot_url = NA)) %>%
+  rbind(data.frame(team = "DAL", player_name = "Kylin Hill", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Henry Ruggs", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NYG", player_name = "Codey McElroy", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NYJ", player_name = "Albert Wilson", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Ryan Fitzpatrick", headshot_url = NA)) %>%
+  rbind(data.frame(team = "ARI", player_name = "Eric Ebron", headshot_url = NA)) %>%
+  rbind(data.frame(team = "TEN", player_name = "Delanie Walker", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NYG", player_name = "Josh Adams", headshot_url = NA)) %>%
+  rbind(data.frame(team = "JAX", player_name = "Ryquell Armstead", headshot_url = NA)) %>%
+  rbind(data.frame(team = "MIA", player_name = "Tavien Feaster", headshot_url = NA)) %>%
+  rbind(data.frame(team = "JAX", player_name = "Kyric McGowan", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NYJ", player_name = "Chris Herndon", headshot_url = NA)) %>%
+  rbind(data.frame(team = "CHI", player_name = "Danny Davis", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Marshawn Lynch", headshot_url = NA)) %>%
+  rbind(data.frame(team = "GB", player_name = "Osirus Mitchell", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "T.J. Vasher", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Tajae Sharpe", headshot_url = NA)) %>%
+  rbind(data.frame(team = "NO", player_name = "Michael Woods", headshot_url = NA)) %>%
+  rbind(data.frame(team = "DEN", player_name = "Devontae Booker", headshot_url = NA)) %>%
+  rbind(data.frame(team = "MIA", player_name = "Jaivon Heiligh", headshot_url = NA)) %>%
+  rbind(data.frame(team = "IND", player_name = "Chester Rogers", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "LeSean McCoy", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Devin Funchess", headshot_url = NA)) %>%
+  rbind(data.frame(team = "PHI", player_name = "DaeSean Hamilton", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Colin Kaepernick", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Tyler Vaughns", headshot_url = NA)) %>%
+  rbind(data.frame(team = "FA", player_name = "Robert Foster", headshot_url = NA))
+  
+# Merge the NFL roster data with the main dataset BBM_22_RS_F based on player_name
+BBM_22_RS_F <- BBM_22_RS_F %>% 
+  left_join(nfl_rosters)
+```
+
+# Feature Engineering
+
+The feature engineering process in this code aims to enhance the
+predictive power of the dataset for modeling individual pick points in a
+Best Ball data analysis. Starting with the initial dataset, several new
+features are derived to capture essential insights into player draft
+strategies and positional values. The first step involves calculating
+the adjusted draft pick over expected (ADPOE) for each player,
+representing the difference between their overall_pick_number and
+projection_adp where positive is positive surplus value for a user. By
+grouping the data by tournament_entry_id and ordering it based on
+overall_pick_number, cumulative counts of players in each position (QB,
+RB, WR, TE) are computed, helping to track the team composition
+throughout the draft. Cumulative ADPOE is tracked by position in
+addition to the calculation of TotalADPOE, providing an overall measure
+of a team's draft ADP relative to expectation.
+
+```{r feature-engineering, echo=FALSE, message=FALSE, warning=FALSE}
+# Perform feature engineering on the data
+best_ball_data_full <- BBM_22_RS_F %>%
+  # Calculate the difference between overall_pick_number and projection_adp and create a new column ADPOE
+  mutate(ADPOE = overall_pick_number - projection_adp) %>%
+  
+  # Group the data by tournament_entry_id
+  group_by(tournament_entry_id) %>%
+  
+  # Sort the data within each group based on overall_pick_number
+  arrange(overall_pick_number) %>%
+  
+  # Calculate cumulative counts of each position (QB, RB, WR, TE) and create new columns (numQB, numRB, numWR, numTE)
+  mutate(
+    numQB = cumsum(position_name == "QB"),
+    numRB = cumsum(position_name %in% c("RB", "FB")),
+    numWR = cumsum(position_name == "WR"),
+    numTE = cumsum(position_name == "TE"),
+    is_duplicated = duplicated(team),
+    numTeams = cumsum(is_duplicated)
+  ) %>%
+  ungroup() %>%
+  
+  # Group the data by tournament_entry_id and position_name
+  group_by(tournament_entry_id, position_name) %>%
+  
+  # Calculate the cumulative sum of ADPOE for each position within each tournament_entry_id
+  mutate(positionalADPOE = cumsum(ADPOE)) %>%
+  ungroup() %>%
+  
+  # Reshape the data to have separate columns for ADPOE of each position (ADPOEQB, ADPOERB, ADPOEWR, ADPOETE, ADPOEFB)
+  pivot_wider(names_from = position_name, values_from = positionalADPOE, names_prefix = "ADPOE") %>%
+  
+  # Left join the original data (BBM_22_RS_F) with the newly engineered features
+  left_join(BBM_22_RS_F) %>%
+  
+  # Group the data by tournament_entry_id again
+  group_by(tournament_entry_id) %>%
+  
+  # Replace ADPOE values of non-QB positions with 0 for the first team pick, and carry the last non-zero value for subsequent picks
+  mutate(
+    "ADPOEQB" = ifelse(team_pick_number == 1 & position_name != "QB", 0, 
+                       na.locf(ADPOEQB, fromLast = TRUE)),
+    "ADPOERB" = ifelse(team_pick_number == 1 & position_name != "RB", 0, 
+                       na.locf(ADPOERB, fromLast = TRUE)),
+    "ADPOEWR" = ifelse(team_pick_number == 1 & position_name != "WR", 0, 
+                       na.locf(ADPOEWR, fromLast = TRUE)),
+    "ADPOETE" = ifelse(team_pick_number == 1 & position_name != "TE", 0, 
+                       na.locf(ADPOETE, fromLast = TRUE)),
+    "ADPOEFB" = ifelse(team_pick_number == 1 & position_name != "FB", 0, 
+                       na.locf(ADPOEFB, fromLast = TRUE))
+  ) %>%
+  ungroup() %>%
+  
+  # Replace any NA values in ADPOEFB with 0
+  mutate(ADPOEFB = replace_na(ADPOEFB, 0)) %>%
+  
+  # Calculate the TotalADPOE by summing the ADPOE values for each position (QB, RB, WR, TE, FB)
+  mutate(TotalADPOE = ADPOEQB + ADPOERB + ADPOEWR + ADPOETE + ADPOEFB) %>%
+  select(-is_duplicated)
+```
+
+# Exploratory Data Analysis
+
+This code performs EDA containing information about pick_points,
+overall_pick_number, and position_name. The first graph creates
+side-by-side boxplots to visualize the distribution of pick_points by
+player position. The second graph fits linear regression curves to each
+position's pick_points based on overall_pick_number using a linear
+function. It then predicts the pick_points for different
+overall_pick_number values using these regression curves. Finally, the
+code plots the regression curves for each position, distinguishing them
+by color (blue for QB, red for RB, green for WR, and purple for TE).
+Note that these are two simplistic ways that one could draft by
+maximizing their pick points in choosing many QBs - however, it does not
+account for the roster construction of having multiple quarterbacks
+
+```{r exploratory-data-analysis, echo=FALSE, warning=FALSE}
+# Side-by-side boxplots of pick_points by position
+ggplot(BBM_22_RS_F, aes(x = position_name, y = pick_points)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Pick Points by Position",
+       x = "Position",
+       y = "Pick Points")
+
+BBM_22_RS_F_players <- BBM_22_RS_F %>%
+  select(pick_points, overall_pick_number, position_name) %>%
+  unique()
+
+ggplot() +
+  geom_smooth(data = BBM_22_RS_F_players, aes(x = overall_pick_number, 
+              y = pick_points,color = position_name), size = 1) +
+  labs(title = "Draft Curves for Pick Points by Draft Pick Number by Position",
+       x = "Pick Number",
+       y = "Pick Points")
+```
+
+# Modeling
+
+As a reminder, the main goal of this project is to develop an EPPOR
+(Expected Pick Points Over Replacement) model for optimizing draft
+strategy in Best Ball. To achieve this, the first model is to predict
+pick points in order to create an estimated draft curve based on those
+predictions (that accounts for other situational variables). The
+expected pick points compared to pick number (the estimated draft curve)
+more accurately represents the estimated draft capital (as a measure of
+points) of each player.
+
+```{r model-one, message=FALSE, warning=FALSE}
+# Select relevant columns for training data
+training_data <- best_ball_data_full %>%
+    select("pick_order", "overall_pick_number", "pick_points", 
+           "team_pick_number", "ADPOE", "numQB", "numRB","numWR", "numTE", 
+           "ADPOERB", "ADPOEWR", "ADPOEQB", "ADPOETE", "ADPOEFB", 
+           "position_name", "TotalADPOE", "numTeams")
+
+# Perform one-hot encoding on the training data (predictors)
+dummy <- dummyVars(" ~ .", data = training_data %>% select(-pick_points))
+X <- predict(dummy, newdata = training_data %>% select(-pick_points))
+
+# Extract the target variable "pick_points" and assign it to the variable Y
+Y <- training_data$pick_points
+
+# Split data into training and validation sets (70% for training, 30% for validation)
+set.seed(31700)  # For reproducibility
+split <- sample(1:nrow(training_data), 0.7 * nrow(training_data))
+train_data <- training_data[split, ]
+validation_data <- training_data[-split, ]
+
+# Create DMatrix for training, validation, and all data
+dtrain <- xgb.DMatrix(data = as.matrix(X[split, ]), label = Y[split])
+dval <- xgb.DMatrix(data = as.matrix(X[-split, ]), label = Y[-split])
+dall <- xgb.DMatrix(data = as.matrix(X), label = Y)
+
+# Define XGBoost parameters
+params <- list(
+  booster = "gbtree",           # Tree-based models
+  objective = "reg:squarederror",  # Default objective for regression tasks
+  eval_metric = "rmse",          # Default evaluation metric for regression tasks: root mean squared error
+  eta = 0.3,                    # Learning rate (Typical values: [0.01, 0.2])
+  max_depth = 6,                # Maximum depth of a tree (Typical values: [3, 10])
+  min_child_weight = 1,         # Minimum sum of instance weight needed in a child (Typical values: [1, 10])
+  subsample = 1,                # Subsample ratio of the training instances (Typical values: [0.5, 1])
+  colsample_bytree = 1,         # Subsample ratio of columns when constructing each tree (Typical values: [0.5, 1])
+  gamma = 0,                    # Minimum loss reduction required to make a further partition (Typical values: [0, 10])
+  lambda = 1,                   # L2 regularization term on weights (Typical values: [0, 1])
+  alpha = 0,                    # L1 regularization term on weights (Typical values: [0, 1])
+  num_parallel_tree = 1,        # Number of parallel trees constructed (for boosting)
+  colsample_bynode = 1,         # Subsample ratio of columns when constructing each split (for tree construction)
+  colsample_bylevel = 1,        # Subsample ratio of columns for each level (for tree construction)
+  scale_pos_weight = 1,         # Balancing of positive and negative weights (for imbalanced datasets)
+  base_score = 0.5,             # The initial prediction score of all instances
+  seed = 0                      # Random seed for reproducibility
+)
+
+# Train the XGBoost model with early stopping
+watchlist <- list(train = dtrain, validation = dval)
+xgb_model <- xgb.train(params = params, data = dtrain, nrounds = 50, early_stopping_rounds = 3, watchlist = watchlist, verbose = 1)
+
+# Get importance scores for the features
+importance_scores <- xgb.importance(model = xgb_model)
+
+# Plot importance scores nicely
+xgb.plot.importance(importance_matrix = importance_scores)
+
+# Make predictions on validation data and calculate residuals
+validation_data$predicted_pick_points <- predict(xgb_model, dval)
+validation_data$residuals <- validation_data$predicted_pick_points - validation_data$pick_points
+
+# Plot predictions versus actuals
+ggplot(validation_data, aes(x = predicted_pick_points, y = pick_points)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Predicted vs. Actual Pick Points - Model 1", x = "Predicted Pick Points", y = "Actual Pick Points")
+
+best_ball_data_full$predicted_pick_points = predict(xgb_model, dall)
+cat("For Model 1, the R-squared between actual and predicted points is", cor(best_ball_data_full$predicted_pick_points, best_ball_data_full$pick_points)^2, "\n")
+```
+
+After 50 iterations of training the XGBoost model, the training RMSE is
+\~41 and the validation RMSE is \~41 with an R-squared of 0.61 between
+actual and predicted points for individuals. Note that performance
+stayed constant even as nrounds went up in the many thousands when
+tested. This shows that this model is not subject to overfitting. The
+most important features in this model are the pick number, whether or
+not a QB is being drafted, and the ADP value over expected. These
+predictions are subsequently used as a feature in the second model that
+is additionally predicting pick points at the player-level. The
+difference between this model and the last model is that it accounts for
+the draft capital used at various positions.
+
+This code builds an XGBoost regression model (Model 2) to predict pick
+points in a Best Ball draft. The training data is split into a training
+set (70%) and a validation set (30%). The XGBoost model is trained with
+early stopping to optimize performance. The feature importance scores
+are plotted for model interpretation. Then, predictions are made on the
+validation set. A plot is generated to compare the predicted pick points
+with the actual pick points. Finally, the R-squared value is calculated
+to assess the model's predictive performance, indicating how well the
+model's predictions align with the actual pick points.
+
+```{r model-two, echo=FALSE, message=FALSE, warning=FALSE}
+# Select relevant columns for training data
+training_data <- best_ball_data_full %>%
+  # Group the data by tournament_entry_id and position_name
+  group_by(tournament_entry_id, position_name) %>%
+  
+  # Calculate the cumulative sum of ADPOE for each position within each tournament_entry_id
+  mutate(positionalPickPoints = cumsum(lag(predicted_pick_points, default = 0))) %>%
+  ungroup() %>%
+  
+  # Reshape the data to have separate columns for ADPOE of each position (ADPOEQB, ADPOERB, ADPOEWR, ADPOETE, ADPOEFB)
+  pivot_wider(names_from = position_name, values_from = positionalPickPoints, names_prefix = "DraftCapital") %>%
+  
+  # Left join the original data (BBM_22_RS_F) with the newly engineered features
+  left_join(BBM_22_RS_F) %>%
+  
+  # Group the data by tournament_entry_id again
+  group_by(tournament_entry_id) %>%
+  
+  # Replace ADPOE values of non-QB positions with 0 for the first team pick, and carry the last non-zero value for subsequent picks
+  mutate(
+    "DraftCapitalQB" = ifelse(team_pick_number == 1 & position_name != "QB", 0, 
+                              na.locf(DraftCapitalQB, fromLast = TRUE)),
+    "DraftCapitalRB" = ifelse(team_pick_number == 1 & position_name != "RB", 0, 
+                              na.locf(DraftCapitalRB, fromLast = TRUE)),
+    "DraftCapitalWR" = ifelse(team_pick_number == 1 & position_name != "WR", 0, 
+                              na.locf(DraftCapitalWR, fromLast = TRUE)),
+    "DraftCapitalTE" = ifelse(team_pick_number == 1 & position_name != "TE", 0, 
+                              na.locf(DraftCapitalTE, fromLast = TRUE)),
+    "DraftCapitalFB" = ifelse(team_pick_number == 1 & position_name != "FB", 0, 
+                              na.locf(DraftCapitalFB, fromLast = TRUE))
+  ) %>%
+  ungroup() %>%
+  
+  # Replace any NA values in ADPOEFB with 0
+  mutate(DraftCapitalFB = replace_na(DraftCapitalFB, 0)) %>%
+  
+  # Calculate the TotalADPOE by summing the ADPOE values for each position (QB, RB, WR, TE, FB)
+  mutate(TotalDraftCapital = DraftCapitalQB + DraftCapitalRB + DraftCapitalWR + 
+           DraftCapitalTE + DraftCapitalFB) %>%
+    select("pick_order", "overall_pick_number", "pick_points", "team_pick_number", 
+           "ADPOE", "numQB", "numRB","numWR", "numTE", "ADPOERB", "ADPOEWR", 
+           "ADPOEQB", "ADPOETE", "ADPOEFB", "position_name", "TotalADPOE",
+           "numTeams","DraftCapitalQB","DraftCapitalRB",
+           "DraftCapitalWR","DraftCapitalTE","DraftCapitalFB","TotalDraftCapital")
+
+# Perform one-hot encoding on the training data (predictors)
+dummy <- dummyVars(" ~ .", data = training_data %>% select(-pick_points))
+X <- predict(dummy, newdata = training_data %>% select(-pick_points))
+
+# Extract the target variable "pick_points" and assign it to the variable Y
+Y <- training_data$pick_points
+
+# Split data into training and validation sets (70% for training, 30% for validation)
+set.seed(31700)  # For reproducibility
+split <- sample(1:nrow(training_data), 0.7 * nrow(training_data))
+train_data <- training_data[split, ]
+validation_data <- training_data[-split, ]
+
+# Create DMatrix for training, validation, and all data
+dtrain <- xgb.DMatrix(data = as.matrix(X[split, ]), label = Y[split])
+dval <- xgb.DMatrix(data = as.matrix(X[-split, ]), label = Y[-split])
+dall <- xgb.DMatrix(data = as.matrix(X), label = Y)
+
+# Define XGBoost parameters
+params <- list(
+  booster = "gbtree",           # Tree-based models
+  objective = "reg:squarederror",  # Default objective for regression tasks
+  eval_metric = "rmse",          # Default evaluation metric for regression tasks: root mean squared error
+  eta = 0.3,                    # Learning rate (Typical values: [0.01, 0.2])
+  max_depth = 6,                # Maximum depth of a tree (Typical values: [3, 10])
+  min_child_weight = 1,         # Minimum sum of instance weight needed in a child (Typical values: [1, 10])
+  subsample = 1,                # Subsample ratio of the training instances (Typical values: [0.5, 1])
+  colsample_bytree = 1,         # Subsample ratio of columns when constructing each tree (Typical values: [0.5, 1])
+  gamma = 0,                    # Minimum loss reduction required to make a further partition (Typical values: [0, 10])
+  lambda = 1,                   # L2 regularization term on weights (Typical values: [0, 1])
+  alpha = 0,                    # L1 regularization term on weights (Typical values: [0, 1])
+  num_parallel_tree = 1,        # Number of parallel trees constructed (for boosting)
+  colsample_bynode = 1,         # Subsample ratio of columns when constructing each split (for tree construction)
+  colsample_bylevel = 1,        # Subsample ratio of columns for each level (for tree construction)
+  scale_pos_weight = 1,         # Balancing of positive and negative weights (for imbalanced datasets)
+  base_score = 0.5,             # The initial prediction score of all instances
+  seed = 0                      # Random seed for reproducibility
+)
+
+# Train the XGBoost model with early stopping
+watchlist <- list(train = dtrain, validation = dval)
+xgb_model <- xgb.train(params = params, data = dtrain, nrounds = 50, 
+                       early_stopping_rounds = 3, watchlist = watchlist)
+
+# Get importance scores for the features
+importance_scores <- xgb.importance(model = xgb_model)
+
+# Plot importance scores nicely
+xgb.plot.importance(importance_matrix = importance_scores)
+
+# Make predictions on validation data and calculate residuals
+validation_data$predicted_pick_points <- predict(xgb_model, dval)
+validation_data$residuals <- validation_data$predicted_pick_points - 
+  validation_data$pick_points
+
+# Plot predictions versus actuals
+ggplot(validation_data, aes(x = predicted_pick_points, y = pick_points)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Predicted vs. Actual Pick Points - Model 2", 
+       x = "Predicted Pick Points", y = "Actual Pick Points")
+
+best_ball_data_full$predicted_pick_points = predict(xgb_model, dall)
+cat("For Model 2, the R-squared between actual and predicted points is", cor(best_ball_data_full$predicted_pick_points, best_ball_data_full$pick_points)^2, "\n")
+```
+
+After 50 iterations of training the XGBoost model, the training RMSE and validation RMSE are lower than the first model with the additional feature (note that performance stayed
+constant even as nrounds went up in the many thousands). The most
+important feature in this model is predominantly the predicted pick points which comprises the other variables. 
+Now that these predictions have
+been made, we can now aggregate the individual pick point estimates to
+find who the best expected teams are.
+
+```{r projected-teams}
+# best_ball_data_full$predictions <- predict(xgb_model, dtrain)
+to_join = best_ball_data_full %>% 
+  left_join(training_data) %>%
+  filter(team_pick_number == 18) %>%
+  select(tournament_entry_id,  "numQB", "numRB","numWR", "numTE", "ADPOERB", 
+         "ADPOEWR", "ADPOEQB", "ADPOETE", "ADPOEFB", "TotalADPOE", "pick_order",
+         "playoff_team","numTeams","DraftCapitalQB","DraftCapitalRB",
+         "DraftCapitalWR","DraftCapitalTE","DraftCapitalFB","TotalDraftCapital")
+training_teams <- best_ball_data_full %>% 
+  group_by(tournament_entry_id) %>%
+  summarise(roster_points = max(roster_points),
+            predicted_points = sum(predicted_pick_points)) %>%
+  left_join(to_join)
+
+# Plot predictions versus actuals
+ggplot(training_teams, aes(x = predicted_points, y = roster_points)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Predicted vs. Actual Pick Points - Model 2", 
+       x = "Predicted Pick Points", y = "Actual Pick Points")
+
+cat("For the team-level of Model 2, the R-squared between actual and predicted points is", cor(training_teams$roster_points, training_teams$predicted_points)^2, "\n")
+
+kable(head(training_teams %>% arrange(desc(predicted_points))))
+```
+
+Additionally, it is interesting to note that the r-squared is
+significantly lower for the combined team model than it is for the
+individual (approximately half). This is relatively surprising given you would think that
+more players would provide a more accurate estimate/balance out any outliers.
+
+In order to analyze the regular season advance rate of rosters, I had to
+adjust the playoff team variable to make it the top two highest scoring
+teams per league throughout weeks 1-14 as defined by roster points.
+
+```{r playoff-team-feature-engineering}
+# Extract unique tournament_entry_id and draft_id pairs from the original dataset
+unique_teams <- best_ball_data_full %>%
+  select(tournament_entry_id, draft_id) %>%
+  unique()
+
+# Merge the training data with the unique tournament_entry_id and draft_id pairs
+training_teams <- training_teams %>%
+  left_join(unique_teams) %>%
+  
+  # Group the data by draft_id for further processing
+  group_by(draft_id) %>%
+  
+  # Arrange the data within each group in descending order of roster_points
+  arrange(desc(roster_points)) %>%
+  
+  # Create a new column 'playoff_team' that marks top 2 teams in each draft_id as 1 (playoff team) and the rest as 0 (non-playoff team)
+  mutate(playoff_team = if_else(row_number() <= 2, 1, 0)) %>%
+  
+  # Ungroup the data
+  ungroup()
+```
+
+This code builds a playoff classification model using XGBoost. It starts
+by performing one-hot encoding on the training data to convert
+categorical variables into binary features. The XGBoost model is then
+trained with binary logistic regression objective to predict playoff
+teams. Early stopping is applied to optimize the model's performance.
+The model's predictions are made on the validation set, and a confusion
+matrix is generated to evaluate the model's classification performance.
+The confusion matrix provides insights into the number of true
+positives, true negatives, false positives, and false negatives, which
+help assess the model's accuracy in classifying playoff teams. 
+
+```{r model-three}
+# Perform one-hot encoding on the training data (predictors)
+dummy <- dummyVars(" ~ .", data = training_teams %>% select(-c("roster_points", "playoff_team", "tournament_entry_id","draft_id")))
+X <- predict(dummy, newdata = training_teams %>% select(-c("roster_points", "playoff_team", "tournament_entry_id","draft_id")))
+
+# Extract the target variable "playoff_team" and assign it to the variable Y
+Y <- training_teams$playoff_team
+
+# Split data into training and validation sets (70% for training, 30% for validation)
+set.seed(123)  # For reproducibility
+split <- sample(1:nrow(training_teams), 0.7 * nrow(training_teams))
+train_data <- training_teams[split, ]
+validation_data <- training_teams[-split, ]
+
+# Create dummy variables for training data
+dummy <- dummyVars(" ~ .", data = train_data %>% select(-c("roster_points", "playoff_team", "tournament_entry_id", "draft_id")))
+X_train <- predict(dummy, newdata = train_data %>% select(-c("roster_points", "playoff_team", "tournament_entry_id", "draft_id")))
+
+# Extract the target variable "playoff_team" for training set and assign it to the variable Y_train
+Y_train <- train_data$playoff_team
+
+# Create dummy variables for validation data
+X_val <- predict(dummy, newdata = validation_data %>% select(-c("roster_points", "playoff_team", "tournament_entry_id", "draft_id")))
+
+# Extract the target variable "playoff_team" for the validation set and assign it to the variable Y_val
+Y_val <- validation_data$playoff_team
+
+# Convert data to DMatrix format (required for xgboost)
+dtrain <- xgb.DMatrix(data = as.matrix(X_train), label = Y_train)
+dval <- xgb.DMatrix(data = as.matrix(X_val), label = Y_val)
+
+params <- list(
+  objective = "binary:logistic",
+  booster = "gbtree",
+  eta = 0.3,
+  max_depth = 10,
+  min_child_weight = 10,
+  subsample = 1,
+  colsample_bytree = 1,
+  gamma = 0,
+  lambda = 1,
+  alpha = 1,
+  eval_metric = "error"
+)
+
+# Train the XGBoost model with early stopping
+xgb_model <- xgb.train(params = params, data = dtrain, nrounds = 100, 
+                       early_stopping_rounds = 3, 
+                       watchlist = list(train = dtrain, validation = dval))
+importance_scores <- xgb.importance(model = xgb_model)
+
+# Optionally, plot the importance scores
+xgb.plot.importance(importance_matrix = importance_scores)
+
+y_pred_class <- ifelse(predict(xgb_model, as.matrix(X_val)) >= 0.5, 1, 0)
+
+# Create a confusion matrix
+confusionMatrix(data = factor(y_pred_class), reference = factor(Y_val))
+```
+
+In Model Four, the objective is to classify teams into "playoff_team" or
+"non-playoff_team" categories using XGBoost classification. Comparing
+Model Four to Model Three, both are classification models targeting
+"playoff_team" prediction. However, Model Four differs in terms of
+feature engineering, as it does not include our output variable from
+Model 2 "predicted_points" that was present in Model Three. This could
+potentially decrease the model's performance. The overall accuracy of
+the confusion matrix in Model Four is slightly worse than Model Three.
+The confidence interval for Model Four's accuracy includes the null
+hypothesis, indicating that the model may not perform significantly
+better than random guessing.
+
+```{r model-four}
+# Perform one-hot encoding on the training data 
+dummy <- dummyVars(" ~ .", data = training_teams %>% 
+                     select(-c("roster_points", "playoff_team", "tournament_entry_id","draft_id","predicted_points")))
+X <- predict(dummy, newdata = training_teams %>% 
+               select(-c("roster_points", "playoff_team", "tournament_entry_id",
+                         "draft_id","predicted_points")))
+
+# Extract the target variable "playoff_team" and assign it to the variable Y
+Y <- training_teams$playoff_team
+
+# Split data into training and validation sets (70% for training, 30% for validation)
+set.seed(123)  # For reproducibility
+split <- sample(1:nrow(training_teams), 0.7 * nrow(training_teams))
+train_data <- training_teams[split, ]
+validation_data <- training_teams[-split, ]
+
+# Create dummy variables for training data
+dummy <- dummyVars(" ~ .", data = train_data %>% select(-c("roster_points", "playoff_team", "tournament_entry_id", "draft_id","predicted_points")))
+X_train <- predict(dummy, newdata = train_data %>% select(-c("roster_points", "playoff_team", "tournament_entry_id", "draft_id","predicted_points")))
+
+# Extract the target variable "playoff_team" for training set and assign it to the variable Y_train
+Y_train <- train_data$playoff_team
+
+# Create dummy variables for validation data
+X_val <- predict(dummy, newdata = validation_data %>% select(-c("roster_points", "playoff_team", "tournament_entry_id", "draft_id")))
+
+# Extract the target variable "playoff_team" for the validation set and assign it to the variable Y_val
+Y_val <- validation_data$playoff_team
+
+# Convert data to DMatrix format (required for xgboost)
+dtrain <- xgb.DMatrix(data = as.matrix(X_train), label = Y_train)
+dval <- xgb.DMatrix(data = as.matrix(X_val), label = Y_val)
+
+params <- list(
+  objective = "binary:logistic",
+  booster = "gbtree",
+  eta = 0.3,
+  max_depth = 10,
+  min_child_weight = 10,
+  subsample = 1,
+  colsample_bytree = 1,
+  gamma = 0,
+  lambda = 1,
+  alpha = 1,
+  eval_metric = "error"
+)
+
+# Train the XGBoost model with early stopping
+xgb_model <- xgb.train(params = params, data = dtrain, nrounds = 100, 
+                       early_stopping_rounds = 3, 
+                       watchlist = list(train = dtrain, validation = dval))
+importance_scores <- xgb.importance(model = xgb_model)
+
+# Optionally, plot the importance scores
+xgb.plot.importance(importance_matrix = importance_scores)
+
+y_pred_class <- ifelse(predict(xgb_model, as.matrix(X_val)) >= 0.5, 1, 0)
+
+# Create a confusion matrix
+confusionMatrix(data = factor(y_pred_class), reference = factor(Y_val))
+```
+
+In Model Five, the focus is on using XGBoost regression to predict
+"pick_points" in a draft scenario. Model Five plays a crucial role in
+draft optimization, as it provides a means to predict the pick points
+for each player during the draft. By using XGBoost regression, teams can
+make informed decisions on player selections, taking into account the
+draft capital spent, positional value, stacking ability, draft pick
+number, draft order, and ADP value as initially laid out in the
+beginning. Model Five serves as a promising foundation for enhancing the
+draft selection process and can be refined further to achieve an even
+more accurate and effective draft optimizer for Best Ball leagues.
+
+```{r model-five}
+# Select relevant columns for training data
+# Perform one-hot encoding on the training data (predictors)
+final_data <- training_data %>%
+  mutate
+dummy <- dummyVars(" ~ .", data = training_data %>% select(-pick_points))
+X <- predict(dummy, newdata = training_data %>% select(-pick_points))
+
+# Extract the target variable "pick_points" and assign it to the variable Y
+Y <- training_data$pick_points
+
+# Split data into training and validation sets (70% for training, 30% for validation)
+set.seed(31700)  # For reproducibility
+split <- sample(1:nrow(training_data), 0.7 * nrow(training_data))
+train_data <- training_data[split, ]
+validation_data <- training_data[-split, ]
+
+# Create DMatrix for training, validation, and all data
+dtrain <- xgb.DMatrix(data = as.matrix(X[split, ]), label = Y[split])
+dval <- xgb.DMatrix(data = as.matrix(X[-split, ]), label = Y[-split])
+dall <- xgb.DMatrix(data = as.matrix(X), label = Y)
+
+# Define XGBoost parameters
+params <- list(
+  booster = "gbtree",           # Tree-based models
+  objective = "reg:squarederror",  # Default objective for regression tasks
+  eval_metric = "rmse",          # Default evaluation metric for regression tasks: root mean squared error
+  eta = 0.3,                    # Learning rate (Typical values: [0.01, 0.2])
+  max_depth = 6,                # Maximum depth of a tree (Typical values: [3, 10])
+  min_child_weight = 1,         # Minimum sum of instance weight needed in a child (Typical values: [1, 10])
+  subsample = 1,                # Subsample ratio of the training instances (Typical values: [0.5, 1])
+  colsample_bytree = 1,         # Subsample ratio of columns when constructing each tree (Typical values: [0.5, 1])
+  gamma = 0,                    # Minimum loss reduction required to make a further partition (Typical values: [0, 10])
+  lambda = 1,                   # L2 regularization term on weights (Typical values: [0, 1])
+  alpha = 1,                    # L1 regularization term on weights (Typical values: [0, 1])
+  num_parallel_tree = 1,        # Number of parallel trees constructed (for boosting)
+  colsample_bynode = 1,         # Subsample ratio of columns when constructing each split (for tree construction)
+  colsample_bylevel = 1,        # Subsample ratio of columns for each level (for tree construction)
+  scale_pos_weight = 1,         # Balancing of positive and negative weights (for imbalanced datasets)
+  base_score = 0.5,             # The initial prediction score of all instances
+  seed = 0                      # Random seed for reproducibility
+)
+
+# Train the XGBoost model with early stopping
+watchlist <- list(train = dtrain, validation = dval)
+xgb_model <- xgb.train(params = params, data = dtrain, nrounds = 100, 
+                       early_stopping_rounds = 3, watchlist = watchlist, verbose = 1)
+
+# Get importance scores for the features
+importance_scores <- xgb.importance(model = xgb_model)
+
+# Plot importance scores nicely
+xgb.plot.importance(importance_matrix = importance_scores)
+```
+
+# Best Ball Mania IV Draft Example
+
+With a hypothetical Best Ball draft, I decided to try out this
+approach in specifically predicting my PPP for all of the players
+currently on Underdog given my roster composition at the time of the
+pick, what selection it was, who was on board, my stacking thus far,
+etc.
+
+```{r}
+# Read in Underdog 2023 ADP with the pre-loaded variables to save time done in Excel
+underdog_R1 = read.csv("underdog_round_1.csv")
+
+# Add a new column for "position_nameFB" and initialize it to 0
+underdog_R1['position_nameFB'] = 0
+
+# Prepare a replacement dataset to simulate adding new players to the draft
+underdog_R1_replacement = underdog_R1 %>%
+  mutate(overall_pick_number = overall_pick_number + 24,
+         team_pick_number = team_pick_number + 2,
+         ADPOE = ADPOE - 24)
+
+# One-hot encode the original and replacement datasets
+dummy <- dummyVars(" ~ .", data = underdog_R1 %>% 
+                     select(-c("selected","team","player_name","projection_adp")))
+dummy_replacement <- dummyVars(" ~ .", data = underdog_R1_replacement %>% select(-c("selected","team","player_name","projection_adp")))
+underdog_X <- predict(dummy, newdata = underdog_R1 %>%
+                        select(-c("selected","team","player_name","projection_adp")))
+underdog_X_replacement <- predict(dummy_replacement, newdata = underdog_R1_replacement %>%
+                        select(-c("selected","team","player_name","projection_adp")))
+
+# Define the desired order of columns for the final dataset
+desired_order <- c("pick_order", "overall_pick_number", "team_pick_number",
+                   "ADPOE", "numQB", "numRB", "numWR", "numTE", "ADPOERB",
+                   "ADPOEWR", "ADPOEQB", "ADPOETE", "ADPOEFB", "position_nameFB",
+                   "position_nameQB", "position_nameRB", "position_nameTE", "position_nameWR",
+                   "TotalADPOE", "numTeams", "DraftCapitalQB", "DraftCapitalRB",
+                   "DraftCapitalWR", "DraftCapitalTE", "DraftCapitalFB", "TotalDraftCapital")
+
+# Reorder the columns in underdog_X and underdog_X_replacement according to the desired order
+underdog_X <- underdog_X[, desired_order]
+underdog_X_replacement <- underdog_X_replacement[, desired_order]
+
+# Make predictions using the XGBoost model for both the original and replacement datasets
+predictions = predict(xgb_model, newdata = as.matrix(underdog_X))
+predictions_replacement = predict(xgb_model, newdata = as.matrix(underdog_X_replacement))
+
+# Calculate the PPPOR (Predicted Pick Points over Replacement) for each player in the draft
+underdog_R1$PPPOR = predictions - predictions_replacement
+
+# Filter the players who are not yet selected, arrange them by descending PPPOR, 
+# select player_name and PPPOR columns, and display the top 5 potential draft targets
+underdog_R1 %>%
+  filter(selected == 0) %>%
+  arrange(desc(PPPOR)) %>%
+  select(player_name, PPPOR) %>%
+  head(5)
+
+```
+Using the trained XGBoost model, this code predicts the pick points for both the current player and its replacement player (2 rounds later), calculates the PPPOR metric, and identifies the top 5 potential draft targets based on their PPPOR values. This approach allows for analyzing player values and potentially uncovering under-the-radar players who may provide high PPPOR during the draft selection process. In this case, the model
+recommends drafting Travis Kelce at #6 overall, though optimizing for PPP would tell you to take a QB. This can then be done for subsequent rounds to provide optimized decision making, ideally in a slow Best Ball format.
+
+# Conclusion
+
+In conclusion, the Underdog Best Ball Bowl project has been a remarkable
+journey that culminated in the creation and exploration of a novel
+metric called PPPOR (Predicted Pick Points over Replacement). This metric
+proved to be a valuable addition to the realm of fantasy football and,
+specifically, within the Best Ball format. PPPOR allowed for a more
+accurate assessment of player potential within a draft while remaining
+player-agnostic, considering both their market value and other
+covariates. The classification models, which aimed to predict playoff
+team status, showcased the importance of considering positional
+differences and draft capital in team composition. The continuous
+XGBoost regression models demonstrated the significance of ADP value in
+predicting pick points. Additionally, the calibration plots highlighted
+the model's ability to make reliable probability estimates.
+
+The investigation of feature importance underscored the critical role of
+projections, draft capital, and position-specific ADPOE values in player
+selection. The concept of ADPOE itself, as well as its further
+enhancement through positional adjustments, proved to be a powerful tool
+for evaluating player performance and value in Best Ball leagues.
+
+PPPOR's potential applications extend far beyond the Underdog Best Ball
+Bowl project. In the broader context of fantasy football, PPPOR can
+serve as a powerful metric to aid fantasy managers in player selection
+during drafts. It provides an objective evaluation of players' predicted
+points relative to their expected draft positions, offering a
+comprehensive view of player value.
+
+# Limitations and Future Research
+
+One area where the project could be enhanced is hyperparameter tuning.
+Due to time and computational constraints, we used random search to find
+optimal hyperparameters for our models. While this approach provided
+satisfactory results, more exhaustive tuning methods, such as grid
+search or Bayesian optimization, could potentially lead to even better
+model performance.Another area of potential improvement is nuanced
+stacking feature engineering. While we successfully employed a simple
+stacking technique by taking the number of players on duplicate teams,
+it does not account for the nuances of a QB-WR-WR stack v. a RB-RB-TE
+stack.
+
+In the future, this project would greatly benefit from a UI/website to
+make it easier for users to upload their latest draft/ADP/who has been
+selected. Additionally, I would have liked to investigate the impact of
+playoffs on expected value rather than purely advance rates. Moreover,
+there could be a way to allow player grades/influence make its way into
+a model rather than being purely player-agnostic. Other areas that could
+be interesting to look into would be bye week optimization, portfolio
+theory with ownership rates/risk management, and late-season
+optimization around trying to field the worst team possible that will
+reach the finals so that you have a large unowned player base.
+
+Thank You to Underdog, Fantasy Data Pros, OpenAI + Google, and Mike
+Leone for putting on this competition and helping me get up to speed
+through reading/watching materials.
